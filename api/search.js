@@ -1,28 +1,28 @@
 // Fallback content with textbook knowledge
 const fallbackContent = {
-  'probability': {
-    title: 'Introduction to Probability - Chapter 1',
-    content: 'Probability measures the likelihood of events occurring, ranging from 0 (impossible) to 1 (certain). Key concepts include sample spaces, events, and the basic probability rules.'
+  'newton': {
+    title: "Newton's Laws of Motion - Chapter 5",
+    content: "Newton's three laws: 1) An object at rest stays at rest unless acted on by a net force. 2) F = ma. 3) For every action there is an equal and opposite reaction."
   },
-  'bayes': {
-    title: 'Bayes Theorem - Chapter 3', 
-    content: 'Bayes theorem: P(A|B) = P(B|A)P(A)/P(B). This describes how to update probabilities based on new evidence.'
+  'kinematics': {
+    title: 'Kinematics - Chapter 3',
+    content: 'Kinematics describes motion using displacement, velocity, and acceleration. Key equations: v = v₀ + at, x = x₀ + v₀t + ½at², v² = v₀² + 2aΔx.'
   },
-  'normal distribution': {
-    title: 'Normal Distribution - Chapter 5',
-    content: 'The normal distribution N(μ,σ²) is bell-shaped with mean μ and variance σ². About 68% of values fall within 1 standard deviation of the mean.'
+  'energy': {
+    title: 'Work and Energy - Chapter 7',
+    content: 'Work W = F·d·cosθ. Kinetic energy KE = ½mv². Potential energy PE = mgh. Conservation of energy: total mechanical energy is constant in the absence of non-conservative forces.'
   },
-  'binomial': {
-    title: 'Binomial Distribution - Chapter 4',
-    content: 'For n independent trials with success probability p: P(X=k) = C(n,k)p^k(1-p)^(n-k). Mean = np, Variance = np(1-p).'
+  'momentum': {
+    title: 'Momentum and Collisions - Chapter 9',
+    content: 'Momentum p = mv. Impulse J = FΔt = Δp. In a closed system, total momentum is conserved. Elastic collisions conserve both momentum and kinetic energy.'
   },
-  'conditional': {
-    title: 'Conditional Probability - Chapter 2',
-    content: 'P(A|B) = P(A∩B)/P(B). The probability of A given that B has occurred.'
+  'gravity': {
+    title: 'Gravitation - Chapter 13',
+    content: "Newton's law of gravitation: F = Gm₁m₂/r². Near Earth's surface, g ≈ 9.8 m/s². Gravitational potential energy U = -Gm₁m₂/r."
   },
-  'independence': {
-    title: 'Independence - Chapter 2',
-    content: 'Events A and B are independent if P(A∩B) = P(A)P(B), or equivalently P(A|B) = P(A).'
+  'waves': {
+    title: 'Waves - Chapter 16',
+    content: 'Wave speed v = fλ. Transverse waves oscillate perpendicular to propagation; longitudinal waves oscillate parallel. The wave equation: v = √(T/μ) for a string.'
   }
 };
 
@@ -130,9 +130,9 @@ export default async function handler(req, res) {
           }];
         } else {
           results = [{
-            title: 'Probability Concepts',
+            title: 'Physics Concepts',
             link: 'Built-in reference',
-            snippet: 'This topic relates to fundamental probability and statistics concepts. Let me help explain the key principles.'
+            snippet: 'This topic relates to fundamental physics concepts. Let me help explain the key principles.'
           }];
         }
       }
@@ -144,9 +144,9 @@ export default async function handler(req, res) {
       
       // Provide fallback even on complete failure
       const fallbackResults = [{
-        title: 'Probability Reference',
+        title: 'Physics Reference',
         link: 'Built-in content',
-        snippet: 'I can help explain probability and statistics concepts based on my training. What specific topic would you like to explore?'
+        snippet: 'I can help explain physics concepts based on my training. What specific topic would you like to explore?'
       }];
       
       res.status(200).json({ results: fallbackResults });
