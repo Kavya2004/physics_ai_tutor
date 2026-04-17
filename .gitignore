@@ -60,3 +60,6 @@ build/
 *.backup
 
 index.php
+
+# Large files
+textbook.pdf
