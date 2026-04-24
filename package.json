@@ -1,5 +1,8 @@
 {
   "type": "module",
+  "scripts": {
+    "start": "node javascript/session-server.js"
+  },
   "dependencies": {
     "axios": "^1.11.0",
     "cheerio": "^1.1.2",
