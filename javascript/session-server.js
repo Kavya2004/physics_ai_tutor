@@ -9,11 +9,14 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-app.use(cors({ 
-  origin: [
-    "https://ai-tutor-teal-one.vercel.app",
-    "https://tutor.probabilitycourse.com"
-  ]
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || origin.endsWith('.vercel.app') || origin === 'https://tutor.probabilitycourse.com') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
 }));
 app.use(express.json());
 

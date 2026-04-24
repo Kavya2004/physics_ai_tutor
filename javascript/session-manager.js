@@ -1,3 +1,5 @@
+const BACKEND_URL = "https://ai-tutor-53f1.onrender.com";
+
 class SessionManager {
   constructor() {
     this.currentSession = null;
@@ -11,10 +13,15 @@ class SessionManager {
     this.initializeSessionUI();
     this.selectedAvatar = "👨‍🎓";
     this.selectedColor = "#3498db";
+    this.wakeUpBackend();
     window.addEventListener("resize", () => this.handleResize());
     window.addEventListener("orientationchange", () => {
       setTimeout(() => this.handleResize(), 100);
     });
+  }
+
+  wakeUpBackend() {
+    fetch(`${BACKEND_URL}/health`).catch(() => {});
   }
 
   initializeSessionUI() {
@@ -223,7 +230,7 @@ class SessionManager {
   
   async showPublicSessions() {
     try {
-      const response = await fetch("https://ai-tutor-53f1.onrender.com/api/sessions/public");
+      const response = await fetch(`${BACKEND_URL}/api/sessions/public`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -309,7 +316,7 @@ class SessionManager {
         <div class="modal-body">
             <input type="text" id="userNameInput" placeholder="Your name..." maxlength="20">
             <input type="text" id="sessionIdInput" placeholder="Session ID (optional)" style="display: none;">
-            <input type="text" id="sessionTitleInput" placeholder="Session title (e.g., 'Probability Basics')" maxlength="50" style="display: none;" required>
+            <input type="text" id="sessionTitleInput" placeholder="Session title (e.g., 'Physics Basics')" maxlength="50" style="display: none;" required>
             <div class="session-privacy" id="sessionPrivacy" style="display: none;">
                 <h4>Session Privacy</h4>
                 <div class="privacy-options">
@@ -444,7 +451,7 @@ class SessionManager {
       const isPublic = document.getElementById("publicSessionCheckbox").checked;         
       
       const response = await fetch(
-        "https://ai-tutor-53f1.onrender.com/api/sessions/create",
+        `${BACKEND_URL}/api/sessions/create`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -471,7 +478,7 @@ class SessionManager {
       this.updateSessionUI();
 
       this.addSystemMessage(
-        `Session created! Share this link with others: https://tutor.probabilitycourse.com/tutor.html?session=${this.sessionId}`,
+        `Session created! Share this link with others: ${window.location.origin}${window.location.pathname}?session=${this.sessionId}`,
       );
     } catch (error) {
       console.error("Error creating session:", error);
@@ -482,7 +489,7 @@ class SessionManager {
   async createNewSessionWithParams(sessionTitle, isPublic) {
     try {
       const response = await fetch(
-        "https://ai-tutor-53f1.onrender.com/api/sessions/create",
+        `${BACKEND_URL}/api/sessions/create`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -508,7 +515,7 @@ class SessionManager {
       this.updateSessionUI();
   
       this.addSystemMessage(
-        `Session created! Share this link with others: https://tutor.probabilitycourse.com/tutor.html?session=${this.sessionId}`,
+        `Session created! Share this link with others: ${window.location.origin}${window.location.pathname}?session=${this.sessionId}`,
       );
     } catch (error) {
       console.error("Error creating session:", error);
@@ -685,7 +692,7 @@ class SessionManager {
     
     try {
       const response = await fetch(
-        `https://ai-tutor-53f1.onrender.com/api/sessions/${sessionId}/join`,
+        `${BACKEND_URL}/api/sessions/${sessionId}/join`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -739,6 +746,7 @@ class SessionManager {
       this.ws.close();
     }
 
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(`wss://ai-tutor-53f1.onrender.com/sessions/${this.sessionId}`);
     this.lastPingTime = Date.now();
 
@@ -1185,7 +1193,7 @@ class SessionManager {
   }
 
   shareSession() {
-    const link = `https://tutor.probabilitycourse.com/tutor.html?session=${this.sessionId}`;
+    const link = `${window.location.origin}${window.location.pathname}?session=${this.sessionId}`;
     navigator.clipboard
       .writeText(link)
       .then(() => {
@@ -1291,7 +1299,7 @@ class SessionManager {
   async downloadSession() {
     try {
       const response = await fetch(
-        `https://ai-tutor-53f1.onrender.com/api/sessions/${this.sessionId}/download`,
+        `${BACKEND_URL}/api/sessions/${this.sessionId}/download`,
       );
 
       if (!response.ok) {
