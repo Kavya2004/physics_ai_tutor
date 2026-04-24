@@ -69,7 +69,7 @@ Example probability tree:
   }
 }
 
-Respond with valid JSON only!`;
+Respond with valid plain JSON only — no HTML encoding, no markdown, no extra text!`;
 
     const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
@@ -82,7 +82,7 @@ Respond with valid JSON only!`;
         temperature: 0.3,
         topK: 40,
         topP: 0.95,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       }
     };
 
@@ -136,11 +136,26 @@ Respond with valid JSON only!`;
       
       // Clean up common JSON issues
       jsonText = jsonText
-        .replace(/Math\.sqrt\(3\)/g, '1.732') // Replace Math expressions
+        .replace(/&quot;/g, '"')   // Decode HTML entities
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/Math\.sqrt\(3\)/g, '1.732')
         .replace(/\*Math\.sqrt\(3\)/g, '*1.732')
-        .replace(/,\s*\]/g, ']') // Remove trailing commas
+        .replace(/,\s*\]/g, ']')   // Remove trailing commas
         .replace(/,\s*\}/g, '}');
-      
+
+      // Auto-close truncated JSON by balancing brackets
+      const opens = (jsonText.match(/[{[]/g) || []).length;
+      const closes = (jsonText.match(/[}\]]/g) || []).length;
+      if (opens > closes) {
+        // Strip any trailing incomplete token then close
+        jsonText = jsonText.replace(/,\s*$/, '').replace(/"[^"]*$/, '');
+        for (let i = 0; i < opens - closes; i++) {
+          jsonText += (jsonText.trimEnd().endsWith('{') || jsonText.trimEnd().endsWith(',')) ? '}' : ']';
+        }
+      }
+
       diagramData = JSON.parse(jsonText);
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
