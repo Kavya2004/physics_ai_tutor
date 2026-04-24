@@ -1321,19 +1321,59 @@ window.addOcrMessageToChat = function (ocrText, boardType) {
 	}
 };
 
-function showBookRef(pageNumber) {
+let _pdfDoc = null;
+let _pdfCurrentPage = 1;
+
+async function showBookRef(pageNumber) {
 	const panel = document.getElementById('bookRefPanel');
-	const frame = document.getElementById('bookRefFrame');
-	if (!panel || !frame) return;
-	frame.src = `textbook.pdf#page=${pageNumber}`;
+	if (!panel) return;
 	panel.style.display = 'flex';
+	await renderBookPage(pageNumber);
+}
+
+async function renderBookPage(pageNumber) {
+	const canvas = document.getElementById('bookRefCanvas');
+	const label = document.getElementById('bookRefPageLabel');
+	if (!canvas) return;
+
+	try {
+		if (!window.pdfjsLib) {
+			// Load PDF.js worker-less build via dynamic import
+			const mod = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+			window.pdfjsLib = mod;
+			window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+				'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+		}
+
+		if (!_pdfDoc) {
+			_pdfDoc = await window.pdfjsLib.getDocument('textbook.pdf').promise;
+		}
+
+		_pdfCurrentPage = Math.max(1, Math.min(pageNumber, _pdfDoc.numPages));
+		if (label) label.textContent = `Page ${_pdfCurrentPage} / ${_pdfDoc.numPages}`;
+
+		const page = await _pdfDoc.getPage(_pdfCurrentPage);
+		const wrap = document.getElementById('bookRefCanvasWrap');
+		const scale = (wrap ? wrap.clientWidth - 16 : 300) / page.getViewport({ scale: 1 }).width;
+		const viewport = page.getViewport({ scale });
+
+		canvas.width = viewport.width;
+		canvas.height = viewport.height;
+
+		await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+	} catch (e) {
+		console.error('BookRef render error:', e);
+	}
+}
+
+function bookRefChangePage(delta) {
+	renderBookPage(_pdfCurrentPage + delta);
 }
 
 function closeBookRef() {
 	const panel = document.getElementById('bookRefPanel');
-	const frame = document.getElementById('bookRefFrame');
 	if (panel) panel.style.display = 'none';
-	if (frame) frame.src = '';
 }
 
 window.closeBookRef = closeBookRef;
+window.bookRefChangePage = bookRefChangePage;

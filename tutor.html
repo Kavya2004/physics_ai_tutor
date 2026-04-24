@@ -138,9 +138,16 @@
 				<div id="bookRefPanel" style="display:none;">
 					<div id="bookRefHeader">
 						<span>📖 Textbook Reference</span>
+						<div id="bookRefNav">
+							<button onclick="bookRefChangePage(-1)">&#8249;</button>
+							<span id="bookRefPageLabel"></span>
+							<button onclick="bookRefChangePage(1)">&#8250;</button>
+						</div>
 						<button id="bookRefClose" onclick="closeBookRef()">✕</button>
 					</div>
-					<iframe id="bookRefFrame" src="" title="Textbook page"></iframe>
+					<div id="bookRefCanvasWrap">
+						<canvas id="bookRefCanvas"></canvas>
+					</div>
 				</div>
 			</div>
 			<div class="loading-indicator" id="loadingIndicator" style="display: none">
@@ -161,6 +168,7 @@
 			<p>We do not collect, store, or sell any personal data. This website is for educational use only.</p>
 		</div>
 
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 		<script src="javascript/latex-converter.js"></script>
 		<script src="javascript/link-validator.js"></script>

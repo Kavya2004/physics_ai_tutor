@@ -2575,7 +2575,25 @@ figure figcaption {
     color: white;
     font-size: 13px;
     font-weight: 600;
+    gap: 8px;
 }
+#bookRefNav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+}
+#bookRefNav button {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 6px;
+    border-radius: 3px;
+}
+#bookRefNav button:hover { background: rgba(255,255,255,0.35); }
 #bookRefClose {
     background: none;
     border: none;
@@ -2584,12 +2602,20 @@ figure figcaption {
     cursor: pointer;
     line-height: 1;
     padding: 0 4px;
+    margin-left: auto;
 }
-#bookRefFrame {
+#bookRefCanvasWrap {
     flex: 1;
-    border: none;
-    width: 100%;
-    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    background: #888;
+    padding: 8px;
+}
+#bookRefCanvas {
+    max-width: 100%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 @media (max-width: 900px) {
     #bookRefPanel {
