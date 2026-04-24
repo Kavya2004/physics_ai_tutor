@@ -5,15 +5,24 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-let cachedText = null;
+let cachedPages = null; // [{ page, text }]
 
-async function getTextbookText() {
-  if (cachedText) return cachedText;
+async function getTextbookPages() {
+  if (cachedPages) return cachedPages;
   const pdfPath = join(__dirname, '..', 'textbook.pdf');
   const buffer = readFileSync(pdfPath);
-  const data = await pdfParse(buffer);
-  cachedText = data.text;
-  return cachedText;
+  const pages = [];
+  await pdfParse(buffer, {
+    pagerender(pageData) {
+      return pageData.getTextContent().then(tc => {
+        const text = tc.items.map(i => i.str).join(' ');
+        pages.push({ page: pageData.pageNumber, text });
+        return text;
+      });
+    }
+  });
+  cachedPages = pages;
+  return pages;
 }
 
 export default async function handler(req, res) {
@@ -25,20 +34,19 @@ export default async function handler(req, res) {
 
   try {
     const { query } = req.body;
+    const pages = await getTextbookPages();
 
-    const text = await getTextbookText();
+    const match = pages.find(p => p.text.toLowerCase().includes(query.toLowerCase()));
+    if (!match) return res.status(200).json({ pdfs: [] });
 
-    if (!text.toLowerCase().includes(query.toLowerCase())) {
-      return res.status(200).json({ pdfs: [] });
-    }
-
-    const snippet = extractRelevantSnippet(text, query);
+    const snippet = extractSnippet(match.text, query);
     res.status(200).json({
       pdfs: [{
         title: '📄 Physics Textbook',
         url: 'textbook.pdf',
+        pageNumber: match.page,
         snippet,
-        content: extractRelevantSnippet(text, query, 1500)
+        content: extractSnippet(match.text, query, 1500)
       }]
     });
 
@@ -47,10 +55,9 @@ export default async function handler(req, res) {
   }
 }
 
-function extractRelevantSnippet(text, query, maxLength = 300) {
-  const queryIndex = text.toLowerCase().indexOf(query.toLowerCase());
-  if (queryIndex === -1) return text.substring(0, maxLength);
-  const start = Math.max(0, queryIndex - 100);
-  const end = Math.min(text.length, queryIndex + query.length + 200);
-  return text.substring(start, end);
+function extractSnippet(text, query, maxLength = 300) {
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text.substring(0, maxLength);
+  const start = Math.max(0, idx - 100);
+  return text.substring(start, Math.min(text.length, start + maxLength));
 }

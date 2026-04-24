@@ -2555,3 +2555,51 @@ figure figcaption {
 		padding: 8px 10px;
 	}
 }
+
+/* Book Reference Panel */
+#bookRefPanel {
+    width: 340px;
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    border-left: 2px solid #014148;
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+#bookRefHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #014148;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+}
+#bookRefClose {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+#bookRefFrame {
+    flex: 1;
+    border: none;
+    width: 100%;
+    min-height: 0;
+}
+@media (max-width: 900px) {
+    #bookRefPanel {
+        position: fixed;
+        right: 0;
+        top: 0;
+        height: 100%;
+        width: 90vw;
+        max-width: 400px;
+        z-index: 500;
+        box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+    }
+}

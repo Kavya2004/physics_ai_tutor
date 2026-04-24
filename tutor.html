@@ -33,7 +33,7 @@
 						<div id="filePreview" class="file-preview"></div>
 					</div>
 				</div>
-				<div class="whiteboard-section">
+				<div class="whiteboard-section" id="whiteboardSection">
 					<div class="whiteboard-tabs">
 						<button class="tab-button active" id="teacherTab" onclick="switchWhiteboard('teacher')">
 							🎓 Teacher Board
@@ -133,6 +133,14 @@
 																			  
 						</div>
 					</div>
+				</div>
+				<!-- Book Reference Panel -->
+				<div id="bookRefPanel" style="display:none;">
+					<div id="bookRefHeader">
+						<span>📖 Textbook Reference</span>
+						<button id="bookRefClose" onclick="closeBookRef()">✕</button>
+					</div>
+					<iframe id="bookRefFrame" src="" title="Textbook page"></iframe>
 				</div>
 			</div>
 			<div class="loading-indicator" id="loadingIndicator" style="display: none">

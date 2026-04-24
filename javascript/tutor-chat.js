@@ -895,8 +895,9 @@ async function searchPhysicsTextbook(query) {
 			const pdfResults = (pdfData.pdfs || []).map(pdf => ({
 				title: pdf.title,
 				link: pdf.url,
+				pageNumber: pdf.pageNumber,
 				snippet: pdf.snippet,
-				content: pdf.content // Include PDF content for context
+				content: pdf.content
 			}));
 			results = [...results, ...pdfResults];
 		}
@@ -1025,17 +1026,21 @@ async function processUserMessage(message) {
 
 		if (searchResults.length > 0) {
 			let refsText = 'Relevant sections from the physics textbook:\n';
+			let bookPage = null;
 			searchResults.forEach((r, idx) => {
 				refsText += `${idx + 1}. ${r.title} - ${r.link}\n   ${r.snippet}\n`;
 				if (r.content) {
 					refsText += `   Content excerpt: ${r.content.substring(0, 500)}...\n`;
 				}
+				if (r.pageNumber && !bookPage) bookPage = r.pageNumber;
 			});
 
 			context.push({
 				role: 'system',
 				content: refsText
 			});
+
+			if (bookPage) showBookRef(bookPage);
 		}
 
 		// Get AI response with files (only if files processed successfully)
@@ -1315,3 +1320,20 @@ window.addOcrMessageToChat = function (ocrText, boardType) {
 		}, 100);
 	}
 };
+
+function showBookRef(pageNumber) {
+	const panel = document.getElementById('bookRefPanel');
+	const frame = document.getElementById('bookRefFrame');
+	if (!panel || !frame) return;
+	frame.src = `textbook.pdf#page=${pageNumber}`;
+	panel.style.display = 'flex';
+}
+
+function closeBookRef() {
+	const panel = document.getElementById('bookRefPanel');
+	const frame = document.getElementById('bookRefFrame');
+	if (panel) panel.style.display = 'none';
+	if (frame) frame.src = '';
+}
+
+window.closeBookRef = closeBookRef;

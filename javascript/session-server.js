@@ -16,8 +16,12 @@ app.use(cors({
     } else {
       callback(new Error('Not allowed by CORS'));
     }
-  }
+  },
+  credentials: true
 }));
+
+// Handle preflight for all routes
+app.options('*', cors());
 app.use(express.json());
 
 const sessions = new Map();
