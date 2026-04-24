@@ -125,7 +125,7 @@ class QuizIntegration {
             <div class="topic-popup-content">
                 <h3>Create Custom Quiz</h3>
                 <p>What topic or chapter would you like to be quizzed on?</p>
-                <input type="text" id="topicInput" placeholder="e.g., Chapter 1, Conditional Probability, Bayes Theorem..." />
+                <input type="text" id="topicInput" placeholder="Kinematics, Chapter 6..." />
                 <div class="chapter-selection">
                     <h4>Select Chapters:</h4>
                     <div class="chapter-checkboxes">
