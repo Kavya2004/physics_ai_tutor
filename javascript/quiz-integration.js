@@ -129,17 +129,18 @@ class QuizIntegration {
                 <div class="chapter-selection">
                     <h4>Select Chapters:</h4>
                     <div class="chapter-checkboxes">
-                        <label><input type="checkbox" value="Chapter 1 - Basic Concepts"><span>Chapter 1</span></label>
-                        <label><input type="checkbox" value="Chapter 2 - Combinatorial Analysis"><span>Chapter 2</span></label>
-                        <label><input type="checkbox" value="Chapter 3 - Discrete Random Variables"><span>Chapter 3</span></label>
-                        <label><input type="checkbox" value="Chapter 4 - Continuous Random Variables"><span>Chapter 4</span></label>
-                        <label><input type="checkbox" value="Chapter 5 - Joint Distributions"><span>Chapter 5</span></label>
-                        <label><input type="checkbox" value="Chapter 6 - Limit Theorems"><span>Chapter 6</span></label>
-                        <label><input type="checkbox" value="Chapter 7 - Statistical Inference"><span>Chapter 7</span></label>
-                        <label><input type="checkbox" value="Chapter 8 - Estimation"><span>Chapter 8</span></label>
-                        <label><input type="checkbox" value="Chapter 9 - Bayesian Inference"><span>Chapter 9</span></label>
-                        <label><input type="checkbox" value="Chapter 10 - Random Processes"><span>Chapter 10</span></label>
-                        <label><input type="checkbox" value="Chapter 11 - Important Random Processes"><span>Chapter 11</span></label>
+                        <label><input type="checkbox" value="Chapter 1 - Measurements and Units"><span>Chapter 1</span></label>
+                        <label><input type="checkbox" value="Chapter 2 - Motion in One Dimension"><span>Chapter 2</span></label>
+                        <label><input type="checkbox" value="Chapter 3 - Vectors and 2D Motion"><span>Chapter 3</span></label>
+                        <label><input type="checkbox" value="Chapter 4 - Newton's Laws of Motion"><span>Chapter 4</span></label>
+                        <label><input type="checkbox" value="Chapter 5 - Work and Energy"><span>Chapter 5</span></label>
+                        <label><input type="checkbox" value="Chapter 6 - Momentum and Collisions"><span>Chapter 6</span></label>
+                        <label><input type="checkbox" value="Chapter 7 - Rotational Motion"><span>Chapter 7</span></label>
+                        <label><input type="checkbox" value="Chapter 8 - Gravitation"><span>Chapter 8</span></label>
+                        <label><input type="checkbox" value="Chapter 9 - Fluids"><span>Chapter 9</span></label>
+                        <label><input type="checkbox" value="Chapter 10 - Thermodynamics"><span>Chapter 10</span></label>
+                        <label><input type="checkbox" value="Chapter 11 - Waves and Sound"><span>Chapter 11</span></label>
+                        <label><input type="checkbox" value="Chapter 12 - Electricity and Magnetism"><span>Chapter 12</span></label>
                     </div>
                 </div>
                 <div class="difficulty-section">
@@ -410,12 +411,12 @@ class QuizIntegration {
                 const isCombined = topic.toLowerCase().includes('combined') || topic.toLowerCase().includes('review') || topic.toLowerCase().includes('midterm') || topic.toLowerCase().includes('final');
                 
                 if (isCombined) {
-                    promptContent = `Create a 5-question multiple choice quiz covering "${topic}". Mix questions from the specified chapters/topics.
+                    promptContent = `Create a 5-question multiple choice quiz covering "${topic}" from the physics textbook. Mix questions from the specified chapters/topics.
 
 DIFFICULTY: ${difficulty.toUpperCase()}
 ${difficultyInstructions}
 
-For combined/review quizzes: Include variety from all mentioned chapters. Use LaTeX for math.
+For combined/review quizzes: Include variety from all mentioned chapters. Use LaTeX for math formulas.
 
 JSON format:
 {
@@ -431,14 +432,12 @@ JSON format:
   ]
 }`;
                 } else {
-                    promptContent = `Create a 5-question multiple choice quiz STRICTLY about "${topic}" from probabilitycourse.com. 
+                    promptContent = `Create a 5-question multiple choice quiz STRICTLY about "${topic}" from the physics textbook.
 
 DIFFICULTY LEVEL: ${difficulty.toUpperCase()}
 ${difficultyInstructions}
 
-IMPORTANT: ALL questions must be from ${topic} ONLY. Do NOT include questions from other chapters.
-
-Use LaTeX for math and stay within the specified chapter scope.
+IMPORTANT: ALL questions must be from ${topic} ONLY. Do NOT include questions from other chapters. Use LaTeX for math formulas.
 
 Return ONLY a JSON object:
 {
@@ -455,7 +454,7 @@ Return ONLY a JSON object:
 }`;
                 }
             } else {
-                promptContent = `Create a 5-question multiple choice quiz STRICTLY about "${topic}". Use readable mathematical notation (like 1/2, P(X=1), etc.) instead of LaTeX.
+                promptContent = `Create a 5-question multiple choice quiz STRICTLY about "${topic}" from the physics textbook. Use readable notation (e.g. F = ma, v² = u² + 2as) instead of complex LaTeX where possible.
 
 DIFFICULTY LEVEL: ${difficulty.toUpperCase()}
 ${difficultyInstructions}
@@ -574,22 +573,21 @@ Return ONLY a JSON object:
     }
 
     extractChapterFromMessage(message) {
-        const lowerMessage = message.toLowerCase();
-        
-        // Common chapter patterns
         const patterns = [
-            /chapter\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i,
+            /chapter\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/i,
             /ch\s*\.?\s*(\d+)/i,
-            /(basic concepts?|sample space|probability axioms?)/i,
-            /(conditional probability|independence|bayes)/i,
-            /(random variables?|discrete|continuous)/i,
-            /(expectation|variance|moment generating)/i,
-            /(joint distributions?|marginal|covariance)/i,
-            /(limit theorems?|central limit|law of large numbers)/i,
-            /(markov chains?|poisson process|brownian motion)/i,
-            /(pdf|cdf|probability density|cumulative)/i,
-            /(pmf|joint pmf|marginal)/i,
-            /(set theory|venn diagram|intersection|union)/i
+            /(measurements?|units?|significant figures?)/i,
+            /(kinematics?|motion|velocity|acceleration|displacement)/i,
+            /(vectors?|projectile|2d motion)/i,
+            /(newton'?s? laws?|force|friction|tension)/i,
+            /(work|energy|power|conservation of energy)/i,
+            /(momentum|impulse|collision)/i,
+            /(rotation|torque|angular momentum|moment of inertia)/i,
+            /(gravitation|gravity|orbital|kepler)/i,
+            /(fluid|pressure|buoyancy|bernoulli)/i,
+            /(thermodynamics?|heat|temperature|entropy|ideal gas)/i,
+            /(waves?|sound|frequency|wavelength|oscillation)/i,
+            /(electricity|magnetism|electric field|magnetic field|circuits?)/i
         ];
         
         for (const pattern of patterns) {

@@ -443,27 +443,27 @@ class QuizSystem {
     }
 }
 
-// Sample quiz data - removed default quizzes, keeping only custom quiz structure
+// Sample quiz data - physics textbook based
 const sampleQuizzes = {
     'test': {
-        title: 'Test Quiz with Hints',
+        title: 'Physics Quick Quiz',
         difficulty: 'easy',
         questions: [
             {
-                question: 'What is the probability of getting heads when flipping a fair coin?',
-                options: ['0.25', '0.5', '0.75', '1.0'],
+                question: 'What is the SI unit of force?',
+                options: ['Joule', 'Newton', 'Watt', 'Pascal'],
                 correct: 1,
-                explanation: 'A fair coin has equal probability for heads and tails, so P(heads) = 1/2 = 0.5'
+                explanation: 'The Newton (N) is the SI unit of force, defined as kg·m/s².'
             },
             {
-                question: 'If you roll a standard six-sided die, what is P(rolling a 3)?',
-                options: ['1/3', '1/6', '1/2', '2/3'],
+                question: 'Which of Newton\'s laws states that F = ma?',
+                options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'],
                 correct: 1,
-                explanation: 'There is one favorable outcome (rolling a 3) out of 6 possible outcomes, so P = 1/6'
+                explanation: 'Newton\'s Second Law states that the net force on an object equals its mass times its acceleration: F = ma.'
             }
         ]
     }
-};
+}
 
 // Initialize quiz system
 const quizSystem = new QuizSystem();
@@ -573,11 +573,14 @@ function startQuiz(quizType) {
 function getChapterKey(input) {
     const lowerInput = input.toLowerCase();
     
-    if (lowerInput.includes('chapter 1') || lowerInput.includes('basic concept')) {
+    if (lowerInput.includes('chapter 1') || lowerInput.includes('mechanics') || lowerInput.includes('motion')) {
         return 'chapter1';
     }
-    if (lowerInput.includes('conditional') || lowerInput.includes('bayes')) {
-        return 'conditional';
+    if (lowerInput.includes('chapter 2') || lowerInput.includes('force') || lowerInput.includes('newton')) {
+        return 'chapter2';
+    }
+    if (lowerInput.includes('chapter 3') || lowerInput.includes('energy') || lowerInput.includes('work')) {
+        return 'chapter3';
     }
     
     return input.toLowerCase();
