@@ -125,38 +125,44 @@ Respond with valid plain JSON only — no HTML encoding, no markdown, no extra t
     // Try to parse JSON response
     let diagramData;
     try {
-      // Extract JSON from response (handle markdown code blocks)
-      let jsonText = generatedText;
-      const jsonMatch = generatedText.match(/```json\n([\s\S]*?)\n```/) || 
-                       generatedText.match(/```\n([\s\S]*?)\n```/);
-      
-      if (jsonMatch) {
-        jsonText = jsonMatch[1];
-      }
-      
-      // Clean up common JSON issues
-      jsonText = jsonText
-        .replace(/&quot;/g, '"')   // Decode HTML entities
+      // Decode HTML entities first (Gemini sometimes returns HTML-encoded text)
+      let jsonText = generatedText
+        .replace(/&quot;/g, '"')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/Math\.sqrt\(3\)/g, '1.732')
-        .replace(/\*Math\.sqrt\(3\)/g, '*1.732')
-        .replace(/,\s*\]/g, ']')   // Remove trailing commas
-        .replace(/,\s*\}/g, '}');
+        .replace(/&gt;/g, '>');
 
-      // Auto-close truncated JSON by balancing brackets
+      // Extract JSON from markdown code blocks (handles ```json, ``` or `` variants)
+      const jsonMatch = jsonText.match(/`{1,3}json\s*([\s\S]*?)`{1,3}/) ||
+                        jsonText.match(/`{1,3}\s*([\s\S]*?)`{1,3}/);
+      if (jsonMatch) jsonText = jsonMatch[1];
+
+      // Remove JS-style comments (// ... and /* ... */)
+      jsonText = jsonText
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+
+      // Fix other common issues
+      jsonText = jsonText
+        .replace(/Math\.sqrt\(3\)/g, '1.732')
+        .replace(/,\s*([\]\}])/g, '$1');  // trailing commas
+
+      // Auto-close truncated JSON
       const opens = (jsonText.match(/[{[]/g) || []).length;
       const closes = (jsonText.match(/[}\]]/g) || []).length;
       if (opens > closes) {
-        // Strip any trailing incomplete token then close
         jsonText = jsonText.replace(/,\s*$/, '').replace(/"[^"]*$/, '');
-        for (let i = 0; i < opens - closes; i++) {
-          jsonText += (jsonText.trimEnd().endsWith('{') || jsonText.trimEnd().endsWith(',')) ? '}' : ']';
+        const stack = [];
+        for (const ch of jsonText) {
+          if (ch === '{' || ch === '[') stack.push(ch);
+          else if (ch === '}' || ch === ']') stack.pop();
+        }
+        while (stack.length) {
+          jsonText += stack.pop() === '{' ? '}' : ']';
         }
       }
 
-      diagramData = JSON.parse(jsonText);
+      diagramData = JSON.parse(jsonText.trim());
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
       // If JSON parsing fails, create a simple response
