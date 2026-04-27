@@ -1,57 +1,37 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+let cachedPages = null;
 
-let cachedPages = null; // [{ page, text }]
-
-async function getTextbookPages() {
-  if (cachedPages) return cachedPages;
-  const pdfPath = join(__dirname, '..', 'college-physics-2e.pdf');
-  const buffer = readFileSync(pdfPath);
-  const pages = [];
-  await pdfParse(buffer, {
-    pagerender(pageData) {
-      return pageData.getTextContent().then(tc => {
-        const text = tc.items.map(i => i.str).join(' ');
-        pages.push({ page: pageData.pageNumber, text });
-        return text;
-      });
-    }
-  });
-  cachedPages = pages;
-  return pages;
+function getPages() {
+  if (!cachedPages) cachedPages = JSON.parse(readFileSync(join(__dirname, 'textbook-pages.json'), 'utf8'));
+  return cachedPages;
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const { query } = req.body;
-    const pages = await getTextbookPages();
+    const pages = getPages();
 
     const match = pages.find(p => p.text.toLowerCase().includes(query.toLowerCase()));
     if (!match) return res.status(200).json({ pdfs: [] });
 
-    const snippet = extractSnippet(match.text, query);
     res.status(200).json({
       pdfs: [{
         title: '📄 College Physics 2e',
         url: 'college-physics-2e.pdf',
         pageNumber: match.page,
-        snippet,
+        snippet: extractSnippet(match.text, query),
         content: extractSnippet(match.text, query, 1500)
       }]
     });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 }
 
