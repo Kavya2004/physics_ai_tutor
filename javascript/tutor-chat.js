@@ -505,12 +505,33 @@ function addMessage(text, sender, files = []) {
 
 	const content = document.createElement('div');
 	content.className = 'message-content';
+
+	// Extract citation line before rendering
+	let citationHTML = '';
+	if (sender === 'bot') {
+		displayText = displayText.replace(
+			/📖\s*Source:\s*([^|\n]+)\|\s*Chapter\s*(\d+):\s*([^|\n]+)\|\s*Page\s*([\d,\s]+)/gi,
+			(_, _book, chNum, chName, pageStr) => {
+				const page = parseInt(pageStr.trim());
+				citationHTML = `<span class="citation-pill" onclick="showBookRef(${page})" title="Open in textbook viewer">📖 Ch.${chNum.trim()}: ${chName.trim()} · p.${pageStr.trim()}</span>`;
+				return '';
+			}
+		).trimEnd();
+	}
+
 	content.innerHTML = displayText
 	.replace(/\n/g, '<br>')
 	.replace(/<https?:\/\/[^>]+>/g, (match) => {
-		const url = match.slice(1, -1); // strip < >
+		const url = match.slice(1, -1);
 		return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
 	});
+
+	if (citationHTML) {
+		const pill = document.createElement('div');
+		pill.className = 'citation-wrap';
+		pill.innerHTML = citationHTML;
+		content.appendChild(pill);
+	}
 
 
 	if (files && files.length > 0) {
@@ -1383,3 +1404,4 @@ function closeBookRef() {
 
 window.closeBookRef = closeBookRef;
 window.bookRefChangePage = bookRefChangePage;
+window.showBookRef = showBookRef;
