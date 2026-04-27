@@ -69,7 +69,7 @@ Example probability tree:
   }
 }
 
-Respond with valid plain JSON only — no HTML encoding, no markdown, no extra text!`;
+Respond with valid plain JSON only — no comments (no // or /* */), no HTML encoding, no markdown, no extra text!`;
 
     const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
@@ -133,18 +133,29 @@ Respond with valid plain JSON only — no HTML encoding, no markdown, no extra t
         .replace(/&gt;/g, '>');
 
       // Extract JSON from markdown code blocks (handles ```json, ``` or `` variants)
-      const jsonMatch = jsonText.match(/`{1,3}json\s*([\s\S]*?)`{1,3}/) ||
-                        jsonText.match(/`{1,3}\s*([\s\S]*?)`{1,3}/);
+      const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)```/) ||
+                        jsonText.match(/```\s*([\s\S]*?)```/) ||
+                        jsonText.match(/`([\s\S]*?)`);
       if (jsonMatch) jsonText = jsonMatch[1];
 
-      // Remove JS-style comments (// ... and /* ... */)
-      jsonText = jsonText
-        .replace(/\/\/[^\n]*/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '');
+      // Extract raw JSON object if no code block (find first { to last })
+      if (!jsonMatch) {
+        const start = jsonText.indexOf('{');
+        const end = jsonText.lastIndexOf('}');
+        if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);
+      }
 
-      // Fix other common issues
+      // Remove JS-style comments — must handle strings carefully
+      // Strip block comments first, then line comments
+      jsonText = jsonText
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/([^:"'\/])(\/\/[^\n]*)/g, '$1')  // line comments not inside strings
+        .replace(/^\s*\/\/[^\n]*/gm, '');           // line comments at start of line
+
+      // Fix common issues
       jsonText = jsonText
         .replace(/Math\.sqrt\(3\)/g, '1.732')
+        .replace(/Math\.PI/g, '3.14159')
         .replace(/,\s*([\]\}])/g, '$1');  // trailing commas
 
       // Auto-close truncated JSON
@@ -164,11 +175,11 @@ Respond with valid plain JSON only — no HTML encoding, no markdown, no extra t
 
       diagramData = JSON.parse(jsonText.trim());
     } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      // If JSON parsing fails, create a simple response
+      console.error('JSON parse error:', parseError.message);
+      console.error('Raw Gemini response:', generatedText.substring(0, 500));
       diagramData = {
         needsDiagram: false,
-        explanation: 'Failed to parse diagram instructions: ' + generatedText
+        explanation: 'Could not generate a diagram for this question.'
       };
     }
 
