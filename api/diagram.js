@@ -133,13 +133,14 @@ Respond with valid plain JSON only — no comments (no // or /* */), no HTML enc
         .replace(/&gt;/g, '>');
 
       // Extract JSON from markdown code blocks (handles ```json, ``` or `` variants)
-      const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)```/) ||
-                        jsonText.match(/```\s*([\s\S]*?)```/) ||
-                        jsonText.match(/`([\s\S]*?)`);
-      if (jsonMatch) jsonText = jsonMatch[1];
+      const jsonMatch = jsonText.match(/```json[\s\S]*?```/) ||
+                        jsonText.match(/```[\s\S]*?```/) ||
+                        jsonText.match(/`[\s\S]*?`/);
+      const jsonMatchGroup = jsonMatch ? [jsonMatch[0], jsonMatch[0].replace(/^`+[a-z]*\s*/,'').replace(/`+$/,'')] : null;
+      if (jsonMatchGroup) jsonText = jsonMatchGroup[1];
 
       // Extract raw JSON object if no code block (find first { to last })
-      if (!jsonMatch) {
+      if (!jsonMatchGroup) {
         const start = jsonText.indexOf('{');
         const end = jsonText.lastIndexOf('}');
         if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);

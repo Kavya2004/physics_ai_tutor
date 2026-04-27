@@ -21,7 +21,7 @@ app.use(cors({
 }));
 
 // Handle preflight for all routes
-app.options('*', cors());
+app.options('/{*path}', cors());
 app.use(express.json());
 
 const sessions = new Map();
