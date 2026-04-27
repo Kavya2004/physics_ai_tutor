@@ -1366,12 +1366,10 @@ async function renderBookPage(pageNumber) {
 	if (!canvas) return;
 
 	try {
-		if (!window.pdfjsLib) {
-			// Load PDF.js worker-less build via dynamic import
-			const mod = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
-			window.pdfjsLib = mod;
+		if (!window.pdfjsLib) { console.error('PDF.js not loaded'); return; }
+		if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
 			window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-				'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+				'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 		}
 
 		if (!_pdfDoc) {
