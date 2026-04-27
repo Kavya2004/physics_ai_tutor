@@ -2615,18 +2615,16 @@ figure figcaption {
     padding: 0 4px;
     margin-left: auto;
 }
-#bookRefCanvasWrap {
+#bookRefTextWrap {
     flex: 1;
     overflow-y: auto;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    background: #888;
-    padding: 8px;
-}
-#bookRefCanvas {
-    max-width: 100%;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    padding: 20px 24px;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #222;
+    white-space: pre-wrap;
+    font-family: Georgia, serif;
 }
 @media (max-width: 900px) {
     #bookRefPanel {

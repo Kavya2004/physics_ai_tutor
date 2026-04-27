@@ -1350,8 +1350,8 @@ window.addOcrMessageToChat = function (ocrText, boardType) {
 	}
 };
 
-let _pdfDoc = null;
 let _pdfCurrentPage = 1;
+let _pdfTotalPages = 0;
 
 async function showBookRef(pageNumber) {
 	const overlay = document.getElementById('bookRefOverlay');
@@ -1361,35 +1361,26 @@ async function showBookRef(pageNumber) {
 }
 
 async function renderBookPage(pageNumber) {
-	const canvas = document.getElementById('bookRefCanvas');
+	const wrap = document.getElementById('bookRefTextWrap');
 	const label = document.getElementById('bookRefPageLabel');
-	if (!canvas) return;
+	if (!wrap) return;
+
+	wrap.innerHTML = '<p style="color:#aaa;padding:20px;text-align:center">Loading...</p>';
 
 	try {
-		if (!window.pdfjsLib) { console.error('PDF.js not loaded'); return; }
-		if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
-			window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-				'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-		}
-
-		if (!_pdfDoc) {
-			_pdfDoc = await window.pdfjsLib.getDocument('college-physics-2e.pdf').promise;
-		}
-
-		_pdfCurrentPage = Math.max(1, Math.min(pageNumber, _pdfDoc.numPages));
-		if (label) label.textContent = `Page ${_pdfCurrentPage} / ${_pdfDoc.numPages}`;
-
-		const page = await _pdfDoc.getPage(_pdfCurrentPage);
-		const wrap = document.getElementById('bookRefCanvasWrap');
-		const scale = (wrap ? wrap.clientWidth - 16 : 300) / page.getViewport({ scale: 1 }).width;
-		const viewport = page.getViewport({ scale });
-
-		canvas.width = viewport.width;
-		canvas.height = viewport.height;
-
-		await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+		const res = await fetch('/api/pdf-page', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ page: pageNumber })
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		_pdfCurrentPage = data.page;
+		_pdfTotalPages = data.total;
+		if (label) label.textContent = `Page ${_pdfCurrentPage} / ${_pdfTotalPages}`;
+		wrap.innerHTML = `<p>${data.text.replace(/\n/g, '<br>')}</p>`;
 	} catch (e) {
-		console.error('BookRef render error:', e);
+		wrap.innerHTML = `<p style="color:#c00;padding:20px">Failed to load page: ${e.message}</p>`;
 	}
 }
 
