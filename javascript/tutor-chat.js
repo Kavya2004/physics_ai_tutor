@@ -38,9 +38,13 @@ Do not simply recite full answers as you've seen in training. Instead, help the 
 
 REFERENCE LINKS INSTRUCTIONS:
 
-You have access to the uploaded physics textbook (textbook.pdf). Relevant excerpts from it will be provided in context.
-When answering, always ground your response in the textbook content provided. Quote or paraphrase directly from it when relevant.
-Reference specific chapters or sections by name when you can identify them from the excerpt.`
+You have access to the uploaded physics textbook "College Physics 2e" (college-physics-2e.pdf). Relevant excerpts from it will be provided in context.
+When answering, ALWAYS ground your response in the textbook content provided. Quote or paraphrase directly from it when relevant.
+
+CITATION RULE — THIS IS MANDATORY AND NON-NEGOTIABLE:
+Every single response you give MUST end with a citation block in exactly this format:
+📖 Source: College Physics 2e | Chapter [number]: [Chapter Name] | Page [number]
+If multiple pages or chapters are relevant, list each one. If the excerpt does not specify a chapter name, write the closest section title you can identify. You must NEVER omit this citation block under any circumstances.`
 	}
 ];
 
@@ -1025,7 +1029,7 @@ async function processUserMessage(message) {
 		const searchResults = await searchPhysicsTextbook(message);
 
 		if (searchResults.length > 0) {
-			let refsText = 'Relevant sections from the physics textbook:\n';
+			let refsText = 'Relevant sections from College Physics 2e:\n';
 			let bookPage = null;
 			searchResults.forEach((r, idx) => {
 				refsText += `${idx + 1}. ${r.title} - ${r.link}\n   ${r.snippet}\n`;
@@ -1033,7 +1037,9 @@ async function processUserMessage(message) {
 					refsText += `   Content excerpt: ${r.content.substring(0, 500)}...\n`;
 				}
 				if (r.pageNumber && !bookPage) bookPage = r.pageNumber;
+				if (r.pageNumber) refsText += `   PDF Page: ${r.pageNumber}\n`;
 			});
+			refsText += '\nREMINDER: You MUST end your response with the citation block: 📖 Source: College Physics 2e | Chapter [number]: [Chapter Name] | Page [number]';
 
 			context.push({
 				role: 'system',
@@ -1123,7 +1129,7 @@ async function processUserMessage(message) {
 
 		// Add helpful note about textbook references
 		errorMessage +=
-			'\n\n📚 Note: I can still help explain physics concepts even if textbook links are temporarily unavailable.';
+			'\n\n📚 Note: I can still help explain physics concepts even if College Physics 2e references are temporarily unavailable.';
 
 		// Handle error message display/broadcasting
 		if (window.sessionManager && window.sessionManager.sessionId) {
@@ -1346,7 +1352,7 @@ async function renderBookPage(pageNumber) {
 		}
 
 		if (!_pdfDoc) {
-			_pdfDoc = await window.pdfjsLib.getDocument('textbook.pdf').promise;
+			_pdfDoc = await window.pdfjsLib.getDocument('college-physics-2e.pdf').promise;
 		}
 
 		_pdfCurrentPage = Math.max(1, Math.min(pageNumber, _pdfDoc.numPages));

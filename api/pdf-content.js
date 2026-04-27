@@ -9,7 +9,7 @@ let cachedPages = null; // [{ page, text }]
 
 async function getTextbookPages() {
   if (cachedPages) return cachedPages;
-  const pdfPath = join(__dirname, '..', 'textbook.pdf');
+  const pdfPath = join(__dirname, '..', 'college-physics-2e.pdf');
   const buffer = readFileSync(pdfPath);
   const pages = [];
   await pdfParse(buffer, {
@@ -42,8 +42,8 @@ export default async function handler(req, res) {
     const snippet = extractSnippet(match.text, query);
     res.status(200).json({
       pdfs: [{
-        title: '📄 Physics Textbook',
-        url: 'textbook.pdf',
+        title: '📄 College Physics 2e',
+        url: 'college-physics-2e.pdf',
         pageNumber: match.page,
         snippet,
         content: extractSnippet(match.text, query, 1500)
