@@ -2557,14 +2557,25 @@ figure figcaption {
 }
 
 /* Book Reference Panel */
+#bookRefOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 #bookRefPanel {
-    width: 340px;
-    min-width: 280px;
+    width: 680px;
+    max-width: 92vw;
+    max-height: 88vh;
     display: flex;
     flex-direction: column;
-    border-left: 2px solid #014148;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
     background: #f8f9fa;
-    flex-shrink: 0;
 }
 #bookRefHeader {
     display: flex;
@@ -2619,14 +2630,8 @@ figure figcaption {
 }
 @media (max-width: 900px) {
     #bookRefPanel {
-        position: fixed;
-        right: 0;
-        top: 0;
-        height: 100%;
-        width: 90vw;
-        max-width: 400px;
-        z-index: 500;
-        box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+        width: 92vw;
+        max-height: 85vh;
     }
 }
 

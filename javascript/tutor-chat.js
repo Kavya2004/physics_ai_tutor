@@ -42,9 +42,9 @@ You have access to the uploaded physics textbook "College Physics 2e" (college-p
 When answering, ALWAYS ground your response in the textbook content provided. Quote or paraphrase directly from it when relevant.
 
 CITATION RULE — THIS IS MANDATORY AND NON-NEGOTIABLE:
-Every single response you give MUST end with a citation block in exactly this format:
+Every single response you give MUST end with a citation line in EXACTLY this plain text format and nothing else — no tables, no markdown, no bold, no headers:
 📖 Source: College Physics 2e | Chapter [number]: [Chapter Name] | Page [number]
-If multiple pages or chapters are relevant, list each one. If the excerpt does not specify a chapter name, write the closest section title you can identify. You must NEVER omit this citation block under any circumstances.`
+If multiple pages or chapters are relevant, list each on its own line in the same format. You must NEVER use a table, grid, or any other formatting for the citation. Plain text only, exactly as shown above.`
 	}
 ];
 
@@ -1060,7 +1060,7 @@ async function processUserMessage(message) {
 				if (r.pageNumber && !bookPage) bookPage = r.pageNumber;
 				if (r.pageNumber) refsText += `   PDF Page: ${r.pageNumber}\n`;
 			});
-			refsText += '\nREMINDER: You MUST end your response with the citation block: 📖 Source: College Physics 2e | Chapter [number]: [Chapter Name] | Page [number]';
+			refsText += '\nREMINDER: End your response with ONLY this plain text line (no table, no markdown formatting): 📖 Source: College Physics 2e | Chapter [number]: [Chapter Name] | Page [number]';
 
 			context.push({
 				role: 'system',
@@ -1108,6 +1108,12 @@ async function processUserMessage(message) {
 		
 		// Clean up any remaining whiteboard tags
 		botResponse = botResponse.replace(/\[(?:TEACHER_BOARD|STUDENT_BOARD|GENERATE_DIAGRAM):[^\]]+\]/g, '').trim();
+
+		// Strip any markdown table the AI generated for the citation
+		botResponse = botResponse.replace(/\|[^\n]*Source[^\n]*\|[\s\S]*?(?=\n\n|$)/gi, '').trim();
+		botResponse = botResponse.replace(/\|[^\n]*College Physics[^\n]*\|[\s\S]*?(?=\n\n|$)/gi, '').trim();
+		// Also strip HTML table if markdown was already converted
+		botResponse = botResponse.replace(/<table[^>]*>[\s\S]*?<\/table>/gi, '').trim();
 
 		// Process bot response for broken links
 		if (window.processBotMessageWithLinkValidation) {
@@ -1352,9 +1358,9 @@ let _pdfDoc = null;
 let _pdfCurrentPage = 1;
 
 async function showBookRef(pageNumber) {
-	const panel = document.getElementById('bookRefPanel');
-	if (!panel) return;
-	panel.style.display = 'flex';
+	const overlay = document.getElementById('bookRefOverlay');
+	if (!overlay) return;
+	overlay.style.display = 'flex';
 	await renderBookPage(pageNumber);
 }
 
@@ -1398,8 +1404,8 @@ function bookRefChangePage(delta) {
 }
 
 function closeBookRef() {
-	const panel = document.getElementById('bookRefPanel');
-	if (panel) panel.style.display = 'none';
+	const overlay = document.getElementById('bookRefOverlay');
+	if (overlay) overlay.style.display = 'none';
 }
 
 window.closeBookRef = closeBookRef;

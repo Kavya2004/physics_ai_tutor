@@ -134,19 +134,21 @@
 						</div>
 					</div>
 				</div>
-				<!-- Book Reference Panel -->
-				<div id="bookRefPanel" style="display:none;">
-					<div id="bookRefHeader">
-						<span>📖 Textbook Reference</span>
-						<div id="bookRefNav">
-							<button onclick="bookRefChangePage(-1)">&#8249;</button>
-							<span id="bookRefPageLabel"></span>
-							<button onclick="bookRefChangePage(1)">&#8250;</button>
+				<!-- Book Reference Modal -->
+				<div id="bookRefOverlay" style="display:none;" onclick="if(event.target===this)closeBookRef()">
+					<div id="bookRefPanel">
+						<div id="bookRefHeader">
+							<span>📖 College Physics 2e</span>
+							<div id="bookRefNav">
+								<button onclick="bookRefChangePage(-1)">&#8249;</button>
+								<span id="bookRefPageLabel"></span>
+								<button onclick="bookRefChangePage(1)">&#8250;</button>
+							</div>
+							<button id="bookRefClose" onclick="closeBookRef()">✕</button>
 						</div>
-						<button id="bookRefClose" onclick="closeBookRef()">✕</button>
-					</div>
-					<div id="bookRefCanvasWrap">
-						<canvas id="bookRefCanvas"></canvas>
+						<div id="bookRefCanvasWrap">
+							<canvas id="bookRefCanvas"></canvas>
+						</div>
 					</div>
 				</div>
 			</div>
