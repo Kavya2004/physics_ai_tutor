@@ -93,6 +93,8 @@ function convertLatexTables(text) {
     const tableRegex = /(?:^\s*\|[^\n]*\|\s*$\n?){2,}/gm;
     
     return text.replace(tableRegex, (match) => {
+        // Skip citation tables
+        if (/source|college physics|chapter|page/i.test(match)) return '';
         // Split into rows and clean them up
         const rows = match.split('\n')
             .map(row => row.trim())
@@ -145,6 +147,8 @@ function convertLatexTables(text) {
 }
 
 function convertMarkdownTables(text) {
+    // Strip citation tables before processing
+    text = text.replace(/(?:\|[^\n]*(?:source|college physics|chapter|page)[^\n]*\|?\n?)+/gi, '');
     const lines = text.split('\n');
     const tableLines = [];
     let inTable = false;

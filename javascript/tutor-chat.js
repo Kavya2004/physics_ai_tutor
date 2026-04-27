@@ -488,7 +488,7 @@ function handleSendMessage() {
 	}
 }
 
-function addMessage(text, sender, files = []) {
+function addMessage(text, sender, files = [], citation = null) {
 	const chatMessages = document.getElementById('chatMessages');
 	const messageDiv = document.createElement('div');
 	messageDiv.className = `message ${sender}-message slide-in`;
@@ -506,17 +506,9 @@ function addMessage(text, sender, files = []) {
 	const content = document.createElement('div');
 	content.className = 'message-content';
 
-	// Extract citation line before rendering
 	let citationHTML = '';
-	if (sender === 'bot') {
-		displayText = displayText.replace(
-			/📖\s*Source:\s*([^|\n]+)\|\s*Chapter\s*(\d+):\s*([^|\n]+)\|\s*Page\s*([\d,\s]+)/gi,
-			(_, _book, chNum, chName, pageStr) => {
-				const page = parseInt(pageStr.trim());
-				citationHTML = `<span class="citation-pill" onclick="showBookRef(${page})" title="Open in textbook viewer">📖 Ch.${chNum.trim()}: ${chName.trim()} · p.${pageStr.trim()}</span>`;
-				return '';
-			}
-		).trimEnd();
+	if (sender === 'bot' && citation) {
+		citationHTML = `<span class="citation-pill" onclick="showBookRef(${citation.page})" title="Open in textbook viewer">📖 Ch.${citation.ch}: ${citation.name} · p.${citation.page}</span>`;
 	}
 
 	content.innerHTML = displayText
@@ -1109,11 +1101,17 @@ async function processUserMessage(message) {
 		// Clean up any remaining whiteboard tags
 		botResponse = botResponse.replace(/\[(?:TEACHER_BOARD|STUDENT_BOARD|GENERATE_DIAGRAM):[^\]]+\]/g, '').trim();
 
-		// Strip any markdown table the AI generated for the citation
-		botResponse = botResponse.replace(/\|[^\n]*Source[^\n]*\|[\s\S]*?(?=\n\n|$)/gi, '').trim();
-		botResponse = botResponse.replace(/\|[^\n]*College Physics[^\n]*\|[\s\S]*?(?=\n\n|$)/gi, '').trim();
-		// Also strip HTML table if markdown was already converted
-		botResponse = botResponse.replace(/<table[^>]*>[\s\S]*?<\/table>/gi, '').trim();
+		// Extract citation BEFORE stripping (before convertLatexToUnicode can turn it into a table)
+		const citationMatch = botResponse.match(/📖\s*Source:\s*College Physics 2e\s*\|\s*Chapter\s*(\d+):\s*([^|\n]+)\|\s*Page\s*([\d,\s]+)/i);
+		const extractedCitation = citationMatch
+			? { ch: citationMatch[1].trim(), name: citationMatch[2].trim(), page: parseInt(citationMatch[3]) }
+			: null;
+		// Strip ALL citation formats before any rendering
+		botResponse = botResponse
+			.replace(/📖\s*Source:[^\n]*/gi, '')
+			.replace(/(?:\|[^\n]*(?:Source|College Physics|Chapter|PAGE)[^\n]*\|?\n?)+/gi, '')
+			.replace(/^[-|\s]+$/gm, '')
+			.trim();
 
 		// Process bot response for broken links
 		if (window.processBotMessageWithLinkValidation) {
@@ -1125,11 +1123,9 @@ async function processUserMessage(message) {
 		
 		// Handle bot response display/broadcasting
 		if (window.sessionManager && window.sessionManager.sessionId) {
-			// In session mode, broadcast bot response to all participants
 			window.sessionManager.broadcastMessage(botResponse, 'bot');
 		} else {
-			// Not in session, add message locally
-			addMessage(botResponse, 'bot');
+			addMessage(botResponse, 'bot', [], extractedCitation);
 		}
 
 		// Execute whiteboard action or generate diagram
