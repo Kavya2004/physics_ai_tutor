@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://ai-tutor-53f1.onrender.com";
+const BACKEND_URL = "https://physics-ai-tutor.onrender.com";
 
 class SessionManager {
   constructor() {
@@ -747,7 +747,7 @@ class SessionManager {
     }
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`wss://ai-tutor-53f1.onrender.com/sessions/${this.sessionId}`);
+    this.ws = new WebSocket(`wss://physics-ai-tutor.onrender.com/sessions/${this.sessionId}`);
     this.lastPingTime = Date.now();
 
     this.ws.onopen = () => {

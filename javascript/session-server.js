@@ -484,7 +484,7 @@ const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`Session server running on port ${PORT}`);
   console.log(
-    `WebSocket endpoint: wss://ai-tutor-53f1.onrender.com/sessions/{sessionId}`,
+    `WebSocket endpoint: wss://physics-ai-tutor.onrender.com/sessions/{sessionId}`,
   );
 });
 
