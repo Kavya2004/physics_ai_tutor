@@ -1068,7 +1068,6 @@ async function processUserMessage(message) {
 				content: refsText
 			});
 
-			if (bookPage) showBookRef(bookPage);
 		}
 
 		// Get AI response with files (only if files processed successfully)
