@@ -1238,42 +1238,42 @@ function handleDiceResult(result) {
 	const message = `I rolled a ${result}! What does this tell us about probability?`;
 	processUserMessage(message);
 }
-// AI Diagram Generation Function
+// AI Diagram Generation Function — uses Gemini image generation
 async function generateAIDiagram(description, targetBoard = 'teacher') {
 	try {
-		if (!window.diagramRenderer) {
-			return;
-		}
+		if (window.switchWhiteboard) window.switchWhiteboard(targetBoard);
 
-		const result = await window.diagramRenderer.generateDiagram(description, targetBoard);
+		const res = await fetch('/api/image-gen', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ prompt: `Clear educational physics diagram: ${description}. White background, labeled, simple and clean.` })
+		});
+		const data = await res.json();
+		if (!res.ok || !data.image) throw new Error(data.error || 'No image returned');
 
-		if (result && result.success) {
-			// Switch to the target whiteboard
-			if (window.switchWhiteboard) {
-				window.switchWhiteboard(targetBoard);
-			}
+		const canvas = targetBoard === 'teacher'
+			? document.getElementById('teacherWhiteboard')
+			: document.getElementById('studentWhiteboard');
+		if (!canvas) throw new Error('Canvas not found');
 
-			// Broadcast diagram action to session if in session mode
-			if (window.sessionManager && window.sessionManager.sessionId && window.sessionManager.ws) {
+		const ctx = canvas.getContext('2d');
+		const img = new Image();
+		img.onload = () => {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+		};
+		img.src = data.image;
 
-				window.sessionManager.ws.send(
-					JSON.stringify({
-						type: 'diagram_generated',
-						description: description,
-						targetBoard: targetBoard,
-						userName: window.sessionManager.userName
-					})
-				);
-			}
-
-
-		} else {
-
-			// Fallback to text explanation
-			addMessage(`Diagram note: ${result.message}`, 'bot');
+		if (window.sessionManager && window.sessionManager.sessionId && window.sessionManager.ws) {
+			window.sessionManager.ws.send(JSON.stringify({
+				type: 'diagram_generated',
+				description,
+				targetBoard,
+				userName: window.sessionManager.userName
+			}));
 		}
 	} catch (error) {
-		addMessage('Sorry, I encountered an issue generating the diagram. Let me explain in text instead.', 'bot');
+		addMessage('Sorry, I had trouble generating the diagram. Let me explain in text instead.', 'bot');
 	}
 }
 
