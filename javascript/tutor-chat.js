@@ -425,7 +425,7 @@ function createChatControls() {
 		padding: 6px 12px;
 		border: 1px solid #ddd;
 		border-radius: 15px;
-		background: #337810;
+		background: #881c1c;
 		color: white;
 		cursor: pointer;
 		font-size: 12px;
@@ -439,7 +439,7 @@ function createChatControls() {
 		padding: 6px 12px;
 		border: 1px solid #ddd;
 		border-radius: 15px;
-		background: #014148;
+		background: #881c1c;
 		color: white;
 		cursor: pointer;
 		font-size: 12px;
@@ -1458,7 +1458,7 @@ function showMediaRef(embedUrl, sourceName, mediaType, page) {
 	panel.style.cssText = 'width:860px;max-width:95vw;height:560px;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.45);background:#111';
 
 	const header = document.createElement('div');
-	header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#014148;color:white;font-size:13px;font-weight:600;flex-shrink:0';
+	header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#881c1c;color:white;font-size:13px;font-weight:600;flex-shrink:0';
 	const pageLabel = page ? ` · p.${page}` : '';
 	header.innerHTML = `<span>${getSourceIcon(sourceName)} ${sourceName}${pageLabel}</span>`;
 
@@ -1494,7 +1494,7 @@ function showTextRef(text, sourceName, page) {
 	panel.style.cssText = 'width:640px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.45);background:#f8f9fa';
 
 	const header = document.createElement('div');
-	header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#014148;color:white;font-size:13px;font-weight:600';
+	header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#881c1c;color:white;font-size:13px;font-weight:600';
 	header.innerHTML = `<span>${getSourceIcon(sourceName)} ${sourceName}${page ? ` · p.${page}` : ''}</span>`;
 
 	const closeBtn = document.createElement('button');
