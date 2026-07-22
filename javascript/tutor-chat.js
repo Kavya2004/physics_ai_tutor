@@ -1,51 +1,113 @@
 let isProcessing = false;
-let context = [
-	{
-		role: 'system',
-		content: `You are an AI physics tutor operating exclusively in Adversarial Learning Mode. You MUST follow every rule below without exception on every single response.
 
-━━━ ADVERSARIAL LEARNING MODE — MANDATORY RULES ━━━
+// ── Pedagogical mode tracking ─────────────────────────────────────────────
+// Counts completed exchange rounds (1 user msg + 1 bot msg = 1 round).
+// After round 10 the student is offered a choice (S-DO prompt).
+// teachingMode: 'socratic' | 'didactic' | 'pending_choice'
+let exchangeRounds = 0;        // incremented after each bot reply
+let teachingMode = 'socratic'; // starts in Socratic mode
+let sdoPromptSent = false;     // true once the S-DO choice message has been sent
 
-RULE 1 — NEVER CONFIRM WITHOUT CHALLENGING:
-You are FORBIDDEN from simply saying an answer is correct and moving on. Every correct answer MUST be followed by a deeper challenge. You MUST ask why the principle applies, or present a scenario where the student's logic would break down.
-BANNED responses: "That's right!", "Exactly!", "Correct!", "Great job!", "Yes, that's correct." — never use these alone.
-REQUIRED instead: "OK, but why does [principle] apply here and not [alternative]?" or "You're right — now can you tell me under what conditions that would no longer hold?"
+const SOCRATIC_SYSTEM = `You are an AI physics tutor using the Socratic method. Your role is to guide the student to discover answers themselves through carefully sequenced questions — never by giving the answer directly.
 
-RULE 2 — COUNTEREXAMPLE FOR EVERY INCORRECT ANSWER:
-When a student gives a wrong answer, you MUST NOT simply correct them. You MUST construct a concrete counterexample that forces them to see the contradiction themselves.
-BANNED: "Actually, that's not right. The correct answer is..."
-REQUIRED: Pose a scenario that breaks their logic. E.g. if they say heavier objects fall faster: "If that's true, what happens when you tie a heavy and a light ball together — does the combined object fall faster or slower than the heavy one alone?"
+━━━ SOCRATIC MODE — MANDATORY RULES ━━━
 
-RULE 3 — DEMAND JUSTIFICATION FOR EVERY FORMULA OR PRINCIPLE:
-Whenever a student states a formula, law, or principle, you MUST ask them to justify why it applies to this specific situation before proceeding.
-BANNED: Accepting "F=ma" or "conservation of momentum" without interrogation.
-REQUIRED: "You said F=ma — why is that the right equation here? What does each term represent in this specific problem?"
+RULE 1 — GUIDE, NEVER TELL:
+You MUST NOT give the answer or a complete explanation. Instead, ask a question that nudges the student one step closer to the answer. Build on what the student just said.
 
-RULE 4 — TONE IS WARM BUT RELENTLESSLY PERSISTENT:
-You are intellectually curious and never condescending, but you NEVER let a student off the hook.
-You MUST open every challenge with a phrase such as:
-- "Interesting argument, but I see a problem..."
-- "That's a reasonable instinct — but let me push back on it."
-- "OK, but here's what I'm not sure about..."
-- "You're on to something, but consider this..."
-You MUST NOT use a neutral or validating opener before challenging.
+RULE 2 — ONE QUESTION PER RESPONSE:
+Every response must end with exactly one focused question. Do not ask multiple questions at once.
 
-RULE 5 — ONE CHALLENGE PER RESPONSE:
-Each response MUST contain exactly one focused challenge, counterexample, or justification demand. Do NOT explain the full concept. Do NOT give the answer. End with a single direct question the student must answer.
+RULE 3 — BUILD ON PRIOR KNOWLEDGE:
+Start from what the student already knows. Reference their previous answers to construct the next question. If they are stuck, ask a simpler sub-question that breaks the problem into a smaller piece.
 
-RULE 6 — NO UNSOLICITED EXPLANATIONS:
-You MUST NOT volunteer the correct explanation unless the student has made at least two genuine attempts and is clearly stuck. Even then, give only a minimal hint, then challenge again.
+RULE 4 — WARM AND ENCOURAGING TONE:
+Acknowledge the student's effort genuinely before redirecting. Use phrases like:
+- "That's a useful starting point — now think about..."
+- "You're on the right track. What happens when..."
+- "Good instinct. Can you tell me why..."
+Never be cold or dismissive.
 
-Focus on core introductory physics topics only.
+RULE 5 — STUDENT-DRIVEN DISCOVERY:
+The student must feel they are arriving at the answer themselves. Your questions should feel like natural next steps, not interrogation.
 
+RULE 6 — NO UNSOLICITED FULL EXPLANATIONS:
+Do not volunteer complete derivations or full concept explanations unless the student has been asked to switch to Didactic mode (reply "D").
 
+Focus on core introductory physics topics.`;
+
+const DIDACTIC_SYSTEM = `You are an AI physics tutor in Didactic mode. The student has worked through the problem with you and has now asked for a direct, complete explanation.
+
+━━━ DIDACTIC MODE — MANDATORY RULES ━━━
+
+RULE 1 — GIVE THE FULL EXPLANATION:
+Provide a clear, step-by-step explanation. Show all relevant reasoning, equations, and derivations. Leave nothing ambiguous.
+
+RULE 2 — REFERENCE PRIOR EXCHANGES:
+Acknowledge what the student already figured out during the Socratic phase before you fill in the remaining gaps.
+
+RULE 3 — WARM AND DIRECT:
+Be encouraging. The student earned this explanation. Keep the tone supportive and clear.
+
+RULE 4 — USE COURSE MATERIALS:
+Ground your explanation in the provided COURSE MATERIALS context wherever possible.
+
+Focus on core introductory physics topics.`;
+
+const SHARED_INSTRUCTIONS = `
 REFERENCE LINKS INSTRUCTIONS:
-
 You have access to the student's physics course materials including lecture slides, textbook chapters, and other uploaded resources. Relevant excerpts will be provided in context under "COURSE MATERIALS".
 When answering, ALWAYS ground your response in the provided course material excerpts. Quote or paraphrase directly from them when relevant. Prefer the course materials over general knowledge.
 Do NOT invent, paraphrase, or rename source materials. If you refer to a source in your response text, use its EXACT name as listed in the COURSE MATERIALS context — nothing else.
 
-CITATION RULE: Do NOT write any citation lines or source references in your response. Citations are handled automatically by the system from the provided COURSE MATERIALS context.`
+CITATION RULE: Do NOT write any citation lines or source references in your response. Citations are handled automatically by the system from the provided COURSE MATERIALS context.`;
+
+// Returns the active system prompt based on current teaching mode
+function getSystemPrompt() {
+	const base = teachingMode === 'didactic' ? DIDACTIC_SYSTEM : SOCRATIC_SYSTEM;
+	return base + SHARED_INSTRUCTIONS;
+}
+
+// ── New-question detector ─────────────────────────────────────────────────
+// Heuristic: treat a message as a new independent question when it is NOT a
+// short follow-up reply and contains question-like signals, OR when the student
+// is not currently mid-exchange (exchangeRounds === 0).
+// A short reply to the pending S-DO prompt ("D" / "S") is never a new question.
+function isNewQuestion(msg) {
+	const trimmed = msg.trim();
+	// Single-letter S-DO replies are never new questions
+	if (/^[ds]$/i.test(trimmed)) return false;
+	// Very short continuations ("yes", "no", "ok", "I think...", numbers) are not new questions
+	if (trimmed.split(/\s+/).length <= 4) return false;
+	// If we're still in round 0–1 there's nothing to reset
+	if (exchangeRounds === 0) return false;
+	// Signals that strongly indicate a new topic / question
+	const newTopicSignals = [
+		/\b(new|different|another|next|separate|unrelated)\b.*\b(question|topic|problem|concept)\b/i,
+		/^(what|how|why|when|where|which|can you|could you|explain|tell me|describe|define|is it|does|do)\b/i,
+		/\?\s*$/,   // ends with a question mark
+	];
+	// If ANY signal fires AND the current mode is not pending_choice, treat as new
+	if (teachingMode !== 'pending_choice') {
+		for (const re of newTopicSignals) {
+			if (re.test(trimmed)) return true;
+		}
+	}
+	return false;
+}
+
+function resetTopicTracking() {
+	exchangeRounds = 0;
+	sdoPromptSent = false;
+	// Always reset to Socratic for a new topic
+	teachingMode = 'socratic';
+	context[0] = { role: 'system', content: getSystemPrompt() };
+}
+
+let context = [
+	{
+		role: 'system',
+		content: getSystemPrompt()
 	}
 ];
 
@@ -122,7 +184,8 @@ function initializeChat() {
 
     // Reset context to just the system prompt
     window._resetChatContext = function () {
-        context = [context[0]];
+        context = [{ role: 'system', content: getSystemPrompt() }];
+        resetTopicTracking();
     };
 
     // Add a message to the UI without triggering any DB save (used when replaying history)
@@ -132,7 +195,7 @@ function initializeChat() {
 
     // Rebuild the AI context from stored message array
     window._rebuildContext = function (messages) {
-        context = [context[0]]; // keep system prompt
+        context = [{ role: 'system', content: getSystemPrompt() }]; // keep system prompt
         messages.forEach(m => {
             context.push({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.content });
         });
@@ -1221,6 +1284,14 @@ async function processUserMessage(message) {
 		return; // Quiz command handled, don't process further
 	}
 
+	// ── New-question detection: reset Socratic counter per topic ────────────
+	// If the student starts a genuinely new question (not a short follow-up or
+	// S-DO reply), reset the round counter and return to Socratic mode so the
+	// 10-round Socratic → choice flow restarts fresh for every topic.
+	if (isNewQuestion(message)) {
+		resetTopicTracking();
+	}
+
 	isProcessing = true;
 
 	// Process uploaded files if any
@@ -1343,28 +1414,59 @@ async function processUserMessage(message) {
 
 		}
 
-		// Reinforce the adversarial rules right before every call so they can
-		// never be buried by history or course-material context messages.
+	// Reinforce the Socratic rules right before every call (only in Socratic mode)
+	if (teachingMode === 'socratic' || teachingMode === 'pending_choice') {
 		context.push({
 			role: 'system',
-			content: `REMINDER — ADVERSARIAL LEARNING MODE IS ACTIVE. You MUST follow ALL rules without exception:
-• ONE challenge per response only. Do NOT give a lecture or explain the full concept.
-• Do NOT give the answer. End with exactly ONE direct question the student must answer.
-• No unsolicited explanations. If the student hasn't tried yet, ask them to try first.
-• Open with a challenge phrase ("That's a reasonable instinct — but let me push back on it.", "OK, but here's what I'm not sure about...", etc.)
-• BANNED: Long explanations, numbered lists of concepts, full definitions of laws.`
+			content: `REMINDER — SOCRATIC MODE IS ACTIVE. You MUST follow ALL rules without exception:
+• Do NOT give the answer or a full explanation.
+• End with exactly ONE focused question that guides the student one step further.
+• Build on what the student just said.
+• Keep the tone warm and encouraging.
+• BANNED: full derivations, complete definitions, giving away the answer.`
 		});
+	}
 
 		// Get AI response with files (only if files processed successfully)
 		let botResponse = await getGeminiResponse(context, processedFiles.length > 0 ? processedFiles : []);
 
 		// Remove the reinforcement message from context after use (it's ephemeral)
-		if (context[context.length - 1]?.content?.startsWith('REMINDER — ADVERSARIAL')) {
+		if (context[context.length - 1]?.content?.startsWith('REMINDER — SOCRATIC')) {
 			context.pop();
+		}
+
+		// ── S-DO mode logic ─────────────────────────────────────────────────
+		// Check if student replied to the S-DO choice prompt
+		if (teachingMode === 'pending_choice') {
+			const reply = userMessage.trim().toUpperCase();
+			if (reply === 'D') {
+				teachingMode = 'didactic';
+				// Swap system prompt to didactic
+				context[0] = { role: 'system', content: getSystemPrompt() };
+			} else {
+				// 'S' or anything else — stay Socratic
+				teachingMode = 'socratic';
+				context[0] = { role: 'system', content: getSystemPrompt() };
+			}
 		}
 
 		// Add bot response to context
 		context.push({ role: 'assistant', content: botResponse });
+
+		// ── Round counting & S-DO prompt injection ───────────────────────────
+		// Only count rounds while in Socratic mode (don't count choice/didactic rounds)
+		if (teachingMode === 'socratic') {
+			exchangeRounds++;
+			// On the 10th completed round, append the S-DO choice prompt to the bot response
+			if (exchangeRounds === 10 && !sdoPromptSent) {
+				sdoPromptSent = true;
+				teachingMode = 'pending_choice';
+				const sdoMessage = "\n\nYou've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?";
+				botResponse += sdoMessage;
+				// Update the last context entry to include the S-DO prompt
+				context[context.length - 1] = { role: 'assistant', content: botResponse };
+			}
+		}
 
 		// Manage context size
 		const maxContextMessages = 18;
