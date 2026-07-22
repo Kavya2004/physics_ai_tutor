@@ -68,38 +68,9 @@ function getSystemPrompt() {
 	return base + SHARED_INSTRUCTIONS;
 }
 
-// ── New-question detector ─────────────────────────────────────────────────
-// Heuristic: treat a message as a new independent question when it is NOT a
-// short follow-up reply and contains question-like signals, OR when the student
-// is not currently mid-exchange (exchangeRounds === 0).
-// A short reply to the pending S-DO prompt ("D" / "S") is never a new question.
-function isNewQuestion(msg) {
-	const trimmed = msg.trim();
-	// Single-letter S-DO replies are never new questions
-	if (/^[ds]$/i.test(trimmed)) return false;
-	// Very short continuations ("yes", "no", "ok", "I think...", numbers) are not new questions
-	if (trimmed.split(/\s+/).length <= 4) return false;
-	// If we're still in round 0–1 there's nothing to reset
-	if (exchangeRounds === 0) return false;
-	// Signals that strongly indicate a new topic / question
-	const newTopicSignals = [
-		/\b(new|different|another|next|separate|unrelated)\b.*\b(question|topic|problem|concept)\b/i,
-		/^(what|how|why|when|where|which|can you|could you|explain|tell me|describe|define|is it|does|do)\b/i,
-		/\?\s*$/,   // ends with a question mark
-	];
-	// If ANY signal fires AND the current mode is not pending_choice, treat as new
-	if (teachingMode !== 'pending_choice') {
-		for (const re of newTopicSignals) {
-			if (re.test(trimmed)) return true;
-		}
-	}
-	return false;
-}
-
 function resetTopicTracking() {
 	exchangeRounds = 0;
 	sdoPromptSent = false;
-	// Always reset to Socratic for a new topic
 	teachingMode = 'socratic';
 	context[0] = { role: 'system', content: getSystemPrompt() };
 }
@@ -1282,14 +1253,6 @@ async function processUserMessage(message) {
 	// Check if this is a quiz request before processing
 	if (window.quizIntegration && window.quizIntegration.handleQuizCommands(message)) {
 		return; // Quiz command handled, don't process further
-	}
-
-	// ── New-question detection: reset Socratic counter per topic ────────────
-	// If the student starts a genuinely new question (not a short follow-up or
-	// S-DO reply), reset the round counter and return to Socratic mode so the
-	// 10-round Socratic → choice flow restarts fresh for every topic.
-	if (isNewQuestion(message)) {
-		resetTopicTracking();
 	}
 
 	isProcessing = true;
