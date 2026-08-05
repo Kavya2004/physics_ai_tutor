@@ -21,6 +21,9 @@ let pendingSymbol = null;
 // When true, resizeCanvas is a no-op — used to block spurious resizes that
 // fire because toggling the math-buttons toolbar changes the panel layout.
 let _suppressResize = false;
+// When true, resizeCanvas and the window resize listener are suppressed
+// during splitter drag so canvas redraws don't cause reflow mid-drag.
+let _isDraggingResize = false;
 
 
 let teacherSymbols = [];
@@ -205,6 +208,7 @@ function initializeWhiteboards() {
 	// Debounced resize handler to prevent excessive operations
 	let resizeTimeout;
 	window.addEventListener('resize', () => {
+		if (_isDraggingResize) return;   // ignore layout shifts caused by splitter drag
 		clearTimeout(resizeTimeout);
 		resizeTimeout = setTimeout(() => {
 			resizeCanvases();
@@ -359,16 +363,27 @@ function setupResizeHandle() {
 		chatSection.appendChild(resizeHandle);
 	}
 
-	let isResizing = false;
+	let isResizingPanel = false;
 	let startX = 0;
 	let startWidth = 0;
+	let pendingRAF = null;     // coalesce mousemove writes into one rAF per frame
+	let latestClientX = 0;
 
 	resizeHandle.addEventListener('mousedown', (e) => {
-		isResizing = true;
+		isResizingPanel = true;
+		_isDraggingResize = true;
 		startX = e.clientX;
 		startWidth = parseInt(window.getComputedStyle(chatSection).width, 10);
+
 		document.body.style.cursor = 'col-resize';
 		document.body.style.userSelect = 'none';
+
+		// Freeze transitions and pointer events on both panels so the browser
+		// doesn't fight the inline style changes on every frame.
+		chatSection.style.transition = 'none';
+		whiteboardSection.style.transition = 'none';
+		chatSection.style.pointerEvents = 'none';
+		whiteboardSection.style.pointerEvents = 'none';
 
 		resizeHandle.style.background = '#337810';
 		resizeHandle.style.color = 'white';
@@ -378,36 +393,117 @@ function setupResizeHandle() {
 	});
 
 	document.addEventListener('mousemove', (e) => {
-		if (!isResizing) return;
+		if (!isResizingPanel) return;
 
-		const deltaX = e.clientX - startX;
-		const newWidth = startWidth + deltaX;
-		const minWidth = 250;
-		const maxWidth = window.innerWidth - 300;
+		latestClientX = e.clientX;
 
-		if (newWidth >= minWidth && newWidth <= maxWidth) {
-			chatSection.style.flexBasis = newWidth + 'px';
-			chatSection.style.width = newWidth + 'px';
+		// Coalesce: only schedule one DOM write per animation frame.
+		if (pendingRAF) return;
+		pendingRAF = requestAnimationFrame(() => {
+			pendingRAF = null;
 
-			// Debounce the resize during manual resizing
-			clearTimeout(resizeTimeout);
-			resizeTimeout = setTimeout(() => {
-				resizeCanvases();
-			}, 50);
-		}
+			const deltaX = latestClientX - startX;
+			const newWidth = startWidth + deltaX;
+			const minWidth = 250;
+			const maxWidth = window.innerWidth - 300;
+
+			if (newWidth >= minWidth && newWidth <= maxWidth) {
+				// Set only flexBasis — do NOT also set width; both together cause
+				// the flex algorithm to recalculate the layout twice per frame.
+				chatSection.style.flexBasis = newWidth + 'px';
+				chatSection.style.maxWidth   = newWidth + 'px';
+			}
+		});
 
 		e.preventDefault();
 	});
 
 	document.addEventListener('mouseup', () => {
-		if (isResizing) {
-			isResizing = false;
-			document.body.style.cursor = '';
-			document.body.style.userSelect = '';
-			resizeHandle.style.background = '#ddd';
-			resizeHandle.style.color = '#666';
+		if (!isResizingPanel) return;
+		isResizingPanel = false;
+		_isDraggingResize = false;
+
+		if (pendingRAF) {
+			cancelAnimationFrame(pendingRAF);
+			pendingRAF = null;
 		}
+
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+
+		// Restore pointer events and transitions on the panels.
+		chatSection.style.pointerEvents = '';
+		whiteboardSection.style.pointerEvents = '';
+		chatSection.style.transition = '';
+		whiteboardSection.style.transition = '';
+
+		resizeHandle.style.background = '';
+		resizeHandle.style.color = '';
+
+		// Fire canvas resize exactly once, after the layout has settled.
+		requestAnimationFrame(() => {
+			resizeCanvases();
+		});
 	});
+
+	// ── Touch support (tablets / mobile) ──────────────────────────────────
+	function startResize(clientX) {
+		isResizingPanel = true;
+		_isDraggingResize = true;
+		startX = clientX;
+		startWidth = parseInt(window.getComputedStyle(chatSection).width, 10);
+		document.body.style.userSelect = 'none';
+		chatSection.style.transition = 'none';
+		whiteboardSection.style.transition = 'none';
+		chatSection.style.pointerEvents = 'none';
+		whiteboardSection.style.pointerEvents = 'none';
+		resizeHandle.style.background = '#337810';
+		resizeHandle.style.color = 'white';
+	}
+
+	function moveResize(clientX) {
+		if (!isResizingPanel) return;
+		latestClientX = clientX;
+		if (pendingRAF) return;
+		pendingRAF = requestAnimationFrame(() => {
+			pendingRAF = null;
+			const newWidth = startWidth + (latestClientX - startX);
+			const minWidth = 250;
+			const maxWidth = window.innerWidth - 300;
+			if (newWidth >= minWidth && newWidth <= maxWidth) {
+				chatSection.style.flexBasis = newWidth + 'px';
+				chatSection.style.maxWidth   = newWidth + 'px';
+			}
+		});
+	}
+
+	function endResize() {
+		if (!isResizingPanel) return;
+		isResizingPanel = false;
+		_isDraggingResize = false;
+		if (pendingRAF) { cancelAnimationFrame(pendingRAF); pendingRAF = null; }
+		document.body.style.userSelect = '';
+		chatSection.style.pointerEvents = '';
+		whiteboardSection.style.pointerEvents = '';
+		chatSection.style.transition = '';
+		whiteboardSection.style.transition = '';
+		resizeHandle.style.background = '';
+		resizeHandle.style.color = '';
+		requestAnimationFrame(() => { resizeCanvases(); });
+	}
+
+	resizeHandle.addEventListener('touchstart', (e) => {
+		startResize(e.touches[0].clientX);
+		e.preventDefault();
+	}, { passive: false });
+
+	document.addEventListener('touchmove', (e) => {
+		if (!isResizingPanel) return;
+		moveResize(e.touches[0].clientX);
+		e.preventDefault();
+	}, { passive: false });
+
+	document.addEventListener('touchend', endResize);
 }
 
 function toggleWhiteboardSize() {
@@ -495,7 +591,7 @@ function resizeCanvases() {
 }
 
 function resizeCanvas(canvas, boardType) {
-	if (_suppressResize) return;
+	if (_suppressResize || _isDraggingResize) return;
 	if (!canvas) {
 		console.warn(`Canvas not found for ${boardType}`);
 		return;
