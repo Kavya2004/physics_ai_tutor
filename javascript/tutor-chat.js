@@ -1312,16 +1312,77 @@ async function processUserMessage(message) {
 		// 	boardToCheck = 'teacher';
 		// }
 
-		let ocrText = null;
-		if (boardToCheck && hasWhiteboardContent(boardToCheck)) {
-			ocrText = await getOcrTextFromWhiteboardImage(boardToCheck);
+		// At-home mode: capture the whiteboard as an actual image and inject it
+		// into processedFiles so Gemini sees it visually — identical to how
+		// in-class mode works via sendWhiteboardToTutor.
+		if (!window.sessionManager?.sessionId && boardToCheck && hasWhiteboardContent(boardToCheck)) {
+			try {
+				const srcCanvas = document.getElementById(
+					boardToCheck === 'teacher' ? 'teacherWhiteboard' : 'studentWhiteboard'
+				);
 
+				if (srcCanvas) {
+					// Build composite: white background + canvas strokes + stickers
+					const snap = document.createElement('canvas');
+					snap.width  = srcCanvas.width;
+					snap.height = srcCanvas.height;
+					const snapCtx = snap.getContext('2d');
+
+					snapCtx.fillStyle = '#ffffff';
+					snapCtx.fillRect(0, 0, snap.width, snap.height);
+					snapCtx.drawImage(srcCanvas, 0, 0);
+
+					// Composite any placed stickers from the overlay
+					const overlay = document.getElementById('stickerOverlay');
+					const stickerPromises = [];
+					if (overlay) {
+						overlay.querySelectorAll('.placed-sticker').forEach(el => {
+							const img = el.querySelector('img');
+							if (!img || !img.complete) return;
+							const left = parseInt(el.style.left) || 0;
+							const top  = parseInt(el.style.top)  || 0;
+							const w    = el.offsetWidth  || parseInt(el.style.width)  || 80;
+							const h    = el.offsetHeight || parseInt(el.style.height) || 80;
+							if (img.naturalWidth === 0) {
+								stickerPromises.push(new Promise(resolve => {
+									img.onload = () => { snapCtx.drawImage(img, left, top, w, h); resolve(); };
+								}));
+							} else {
+								snapCtx.drawImage(img, left, top, w, h);
+							}
+						});
+					}
+					await Promise.all(stickerPromises);
+
+					// Convert to base64 and prepend to processedFiles so Gemini
+					// receives the whiteboard image alongside the user's message.
+					const base64 = snap.toDataURL('image/png');
+					processedFiles.unshift({
+						name: 'student-whiteboard.png',
+						type: 'image/png',
+						base64: base64,
+						size: Math.round(base64.length * 0.75)
+					});
+
+					// If the user typed nothing, give Gemini a useful default prompt
+					if (!userMessage.trim()) {
+						userMessage = 'Here is my whiteboard. Can you look at my work and help me understand if it\'s correct?';
+					} else {
+						userMessage = userMessage + ' [Student whiteboard attached]';
+					}
+				}
+			} catch (wbErr) {
+				// Fall back silently — the message still goes through without the image
+				console.warn('[whiteboard capture]', wbErr);
+			}
+		} else if (boardToCheck && hasWhiteboardContent(boardToCheck)) {
+			// In-class session: OCR path is still used (session handles image via sendWhiteboardToTutor)
+			const ocrText = await getOcrTextFromWhiteboardImage(boardToCheck);
 			if (ocrText && ocrText.trim() && ocrText.trim().toLowerCase() !== 'error reading image text.') {
 				context.push({
 					role: 'user',
 					content: `${boardToCheck} has the text: ${ocrText}`
 				});
-			} else {
 			}
 		}
 
