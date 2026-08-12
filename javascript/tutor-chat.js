@@ -1490,7 +1490,7 @@ async function processUserMessage(message) {
 			if (exchangeRounds === 5 && !sdoPromptSent) {
 				sdoPromptSent = true;
 				teachingMode = 'pending_choice';
-				const sdoMessage = "\n\nYou've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?";
+				const sdoMessage = "\n\n**You've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?**";
 				botResponse += sdoMessage;
 				// Update the last context entry to include the S-DO prompt
 				context[context.length - 1] = { role: 'assistant', content: botResponse };

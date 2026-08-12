@@ -62,8 +62,8 @@ function convertLatexToUnicode(text) {
     result = result.replace(/\\underline\{([^}]+)\}/g, '<u>$1</u>');
 
     // Convert markdown-style formatting
-    result = result.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); // **bold**
-    result = result.replace(/\*([^*]+)\*/g, '<em>$1</em>'); // *italic*
+    result = result.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>'); // **bold**
+    result = result.replace(/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>'); // *italic* (single stars, not double)
     result = result.replace(/`([^`]+)`/g, '<code>$1</code>'); // `code`
     result = result.replace(/~~([^~]+)~~/g, '<del>$1</del>'); // ~~strikethrough~~
 
@@ -139,7 +139,7 @@ function convertLatexTables(text) {
                 }
                 
                 // Handle bold text
-                processedCell = processedCell.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                processedCell = processedCell.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
                 
                 html += `<${tag}>${processedCell}</${tag}>`;
             });
@@ -222,7 +222,7 @@ function processTableLines(lines) {
             }
             
             // Handle bold text
-            processedCell = processedCell.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            processedCell = processedCell.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
             
             html += `<${tag}>${processedCell}</${tag}>`;
         });
