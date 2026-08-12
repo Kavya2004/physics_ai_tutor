@@ -1360,7 +1360,7 @@ async function processUserMessage(message) {
 					processedFiles.unshift({
 						name: 'student-whiteboard.png',
 						type: 'image/png',
-						base64: base64,
+						data: base64,          // must match the 'data' field the server expects
 						size: Math.round(base64.length * 0.75)
 					});
 
