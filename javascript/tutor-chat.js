@@ -2,7 +2,7 @@ let isProcessing = false;
 
 // ── Pedagogical mode tracking ─────────────────────────────────────────────
 // Counts completed exchange rounds (1 user msg + 1 bot msg = 1 round).
-// After round 10 the student is offered a choice (S-DO prompt).
+// After round 5 the student is offered a choice (S-DO prompt).
 // teachingMode: 'socratic' | 'didactic' | 'pending_choice'
 let exchangeRounds = 0;        // incremented after each bot reply
 let teachingMode = 'socratic'; // starts in Socratic mode
@@ -1481,8 +1481,8 @@ async function processUserMessage(message) {
 		// Only count rounds while in Socratic mode (don't count choice/didactic rounds)
 		if (teachingMode === 'socratic') {
 			exchangeRounds++;
-			// On the 10th completed round, append the S-DO choice prompt to the bot response
-			if (exchangeRounds === 10 && !sdoPromptSent) {
+			// On the 5th completed round, append the S-DO choice prompt to the bot response
+			if (exchangeRounds === 5 && !sdoPromptSent) {
 				sdoPromptSent = true;
 				teachingMode = 'pending_choice';
 				const sdoMessage = "\n\nYou've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?";
