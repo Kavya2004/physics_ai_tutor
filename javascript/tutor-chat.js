@@ -1464,12 +1464,17 @@ async function processUserMessage(message) {
 		if (teachingMode === 'pending_choice') {
 			const reply = userMessage.trim().toUpperCase();
 			if (reply === 'D') {
+				// One didactic answer, then automatically roll back to Socratic.
+				// We use a transient flag so the round-counting block below can
+				// detect the rollback after the bot reply is appended.
 				teachingMode = 'didactic';
-				// Swap system prompt to didactic
 				context[0] = { role: 'system', content: getSystemPrompt() };
 			} else {
-				// 'S' or anything else — stay Socratic
+				// 'S' or anything else — stay Socratic, reset counter so the
+				// offer comes again after another 5 rounds.
 				teachingMode = 'socratic';
+				exchangeRounds = 0;
+				sdoPromptSent = false;
 				context[0] = { role: 'system', content: getSystemPrompt() };
 			}
 		}
@@ -1490,6 +1495,14 @@ async function processUserMessage(message) {
 				// Update the last context entry to include the S-DO prompt
 				context[context.length - 1] = { role: 'assistant', content: botResponse };
 			}
+		} else if (teachingMode === 'didactic') {
+			// The didactic explanation has just been delivered.
+			// Automatically roll back to Socratic and reset the counter so the
+			// cycle starts fresh for the student's next question.
+			teachingMode = 'socratic';
+			exchangeRounds = 0;
+			sdoPromptSent = false;
+			context[0] = { role: 'system', content: getSystemPrompt() };
 		}
 
 		// Manage context size
