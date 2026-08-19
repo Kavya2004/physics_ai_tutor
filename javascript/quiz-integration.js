@@ -360,7 +360,7 @@ class QuizIntegration {
 DIFFICULTY: ${difficulty.toUpperCase()}
 ${difficultyInstructions}${bankContext}
 
-IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON object:
+IMPORTANT: ALL questions must be about "${topic}" ONLY. Keep explanations under 2 sentences. Return ONLY a JSON object:
 {
   "title": "${topic} Quiz (${titleSuffix})",
   "difficulty": "${difficulty}",
