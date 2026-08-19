@@ -388,24 +388,40 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON objec
 
             try {
                 let jsonStr = data.response.trim();
+                // Strip markdown code fences
                 if (jsonStr.includes('```json')) {
                     jsonStr = jsonStr.split('```json')[1].split('```')[0].trim();
                 } else if (jsonStr.includes('```')) {
                     jsonStr = jsonStr.split('```')[1].split('```')[0].trim();
                 }
-                quizSystem.startQuiz(JSON.parse(jsonStr));
+                // Extract the first {...} JSON object in case there's surrounding text
+                const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                if (jsonMatch) jsonStr = jsonMatch[0];
+
+                const parsed = JSON.parse(jsonStr);
+                // Ensure difficulty is set correctly (Gemini sometimes ignores it)
+                parsed.difficulty = difficulty;
+                if (!parsed.questions || parsed.questions.length === 0) {
+                    throw new Error('No questions in response');
+                }
+                quizSystem.startQuiz(parsed);
             } catch (e) {
-                quizSystem.startQuiz(this.parseAIResponseToQuiz(data.response, topic));
+                console.error('Quiz JSON parse error:', e.message, '\nRaw response:', data.response?.slice(0, 300));
+                const fallback = this.parseAIResponseToQuiz(data.response, topic, difficulty);
+                if (!fallback.questions || fallback.questions.length === 0) {
+                    throw new Error('Could not parse quiz from AI response');
+                }
+                quizSystem.startQuiz(fallback);
             }
         } catch (error) {
             console.error('Error generating AI quiz:', error);
-            alert('Sorry, there was an error generating the quiz. Please try again.');
             if (window.hideLoading) window.hideLoading();
             else if (loadingIndicator) loadingIndicator.style.display = 'none';
+            alert(`Sorry, there was an error generating the quiz: ${error.message}`);
         }
     }
 
-    parseAIResponseToQuiz(aiResponse, topic) {
+    parseAIResponseToQuiz(aiResponse, topic, difficulty = 'easy') {
         // Simple parser for AI-generated quiz content
         const lines = aiResponse.split('\n').filter(line => line.trim());
         const questions = [];
@@ -443,8 +459,8 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON objec
         
         return {
             title: `${topic} Quiz`,
-            difficulty: 'easy',
-            questions: questions.slice(0, 5) // Limit to 5 questions
+            difficulty: difficulty,
+            questions: questions.slice(0, 5)
         };
     }
 
