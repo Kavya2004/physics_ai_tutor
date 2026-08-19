@@ -374,7 +374,7 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Keep explanations under 
   ]
 }`;
 
-            console.log('[Quiz] Prompt length:', promptContent.length, '| difficulty:', difficulty);
+
             const response = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -382,7 +382,6 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Keep explanations under 
             });
 
             const data = await response.json();
-            console.log('[Quiz] API status:', response.status, '| data:', JSON.stringify(data).slice(0, 500));
 
             if (!response.ok || data.error) {
                 throw new Error(`API error ${response.status}: ${data.message || data.error || response.statusText}`);
@@ -390,8 +389,6 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Keep explanations under 
 
             if (window.hideLoading) window.hideLoading();
             else if (loadingIndicator) loadingIndicator.style.display = 'none';
-
-            console.log('[Quiz] Raw Gemini response:', data.response);
 
             try {
                 let jsonStr = data.response.trim();
@@ -412,19 +409,16 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Keep explanations under 
                 }
                 quizSystem.startQuiz(parsed);
             } catch (e) {
-                console.error('[Quiz] JSON parse error:', e.message);
-                console.error('[Quiz] Full raw response:', data.response);
                 const fallback = this.parseAIResponseToQuiz(data.response, topic, difficulty);
                 if (!fallback.questions || fallback.questions.length === 0) {
-                    throw new Error(`Could not parse quiz. Raw response logged to console.`);
+                    throw new Error('Could not generate quiz. Please try again.');
                 }
                 quizSystem.startQuiz(fallback);
             }
         } catch (error) {
-            console.error('Error generating AI quiz:', error);
             if (window.hideLoading) window.hideLoading();
             else if (loadingIndicator) loadingIndicator.style.display = 'none';
-            alert(`Sorry, there was an error generating the quiz: ${error.message}`);
+            alert(`Sorry, there was an error generating the quiz. Please try again.`);
         }
     }
 
