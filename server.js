@@ -99,8 +99,15 @@ app.post('/api/sessions/:sessionId/join', (req, res) => {
     if (!userName || !userName.trim()) return res.status(400).json({ error: 'User name is required' });
     const session = sessions.get(sessionId);
     if (!session) return res.status(404).json({ error: 'Session not found' });
-    if (session.participants.has(userName.trim())) return res.status(400).json({ error: 'User name already taken' });
-    session.participants.set(userName.trim(), { userName: userName.trim(), avatar: avatar || '👤', color: color || '#6c757d', isHost: false, joinedAt: new Date() });
+    // Allow re-join (host joining their own session, or reconnect) — just update their info.
+    session.participants.set(userName.trim(), {
+        userName: userName.trim(),
+        avatar: avatar || '👤',
+        color: color || '#6c757d',
+        isHost: session.participants.get(userName.trim())?.isHost || false,
+        joinedAt: session.participants.get(userName.trim())?.joinedAt || new Date(),
+        lastSeen: new Date(),
+    });
     session.lastActivity = new Date();
 
     // Persist student to MongoDB
@@ -187,15 +194,34 @@ wss.on('connection', (ws, req) => {
                         const p = session.participants.get(userName);
                         p.avatar = msg.avatar || p.avatar;
                         p.color = msg.color || p.color;
+                        p.lastSeen = new Date();
+                    } else {
+                        session.participants.set(userName, { userName, avatar: msg.avatar || '👤', color: msg.color || '#6c757d', isHost: false, joinedAt: new Date(), lastSeen: new Date() });
+                    }
+                    // Cancel any pending disconnect timer for this user.
+                    if (session._disconnectTimers) {
+                        const timerKey = `${sessionId}:${userName}`;
+                        if (session._disconnectTimers.has(timerKey)) {
+                            clearTimeout(session._disconnectTimers.get(timerKey));
+                            session._disconnectTimers.delete(timerKey);
+                        }
                     }
                     sessionConnections.get(sessionId).push({ ws, userName });
+                    // Notify others that someone joined
                     broadcastToSession(sessionId, { type: 'participant_joined', userName, timestamp: new Date().toISOString() }, ws);
+                    // Send session info to the new joiner
                     ws.send(JSON.stringify({ type: 'session_info', sessionTitle: session.sessionTitle, isPublic: session.isPublic, participants: Array.from(session.participants.values()) }));
-                    ws.send(JSON.stringify({ type: 'participants_update', participants: Array.from(session.participants.values()) }));
+                    // Send full history to new joiner
+                    if (session.messages.length > 0) {
+                        ws.send(JSON.stringify({ type: 'session_history', messages: session.messages }));
+                    }
+                    // Broadcast updated participant list to ALL clients (including new joiner)
+                    // so every client's count is always in sync.
+                    broadcastToSession(sessionId, { type: 'participants_update', participants: Array.from(session.participants.values()) });
                     break;
                 case 'message':
                     if (userName) {
-                        const msgObj = { id: uuidv4(), message: msg.message, sender: msg.sender, userName, timestamp: new Date().toISOString(), files: msg.files || [] };
+                        const msgObj = { id: uuidv4(), message: msg.message, sender: msg.sender, userName, timestamp: new Date().toISOString(), files: msg.files || [], citations: msg.citations || [] };
                         session.messages.push(msgObj);
                         session.lastActivity = new Date();
                         broadcastToSession(sessionId, { type: 'message', ...msgObj });
@@ -208,8 +234,16 @@ wss.on('connection', (ws, req) => {
                     break;
                 case 'leave':
                     if (userName) {
+                        if (session._disconnectTimers) {
+                            const timerKey = `${sessionId}:${userName}`;
+                            if (session._disconnectTimers.has(timerKey)) {
+                                clearTimeout(session._disconnectTimers.get(timerKey));
+                                session._disconnectTimers.delete(timerKey);
+                            }
+                        }
                         session.participants.delete(userName);
                         broadcastToSession(sessionId, { type: 'participant_left', userName, timestamp: new Date().toISOString() }, ws);
+                        broadcastToSession(sessionId, { type: 'participants_update', participants: Array.from(session.participants.values()) });
                     }
                     break;
                 case 'profile_update':
@@ -232,11 +266,26 @@ wss.on('connection', (ws, req) => {
             const conns = sessionConnections.get(sessionId) || [];
             const idx = conns.findIndex(c => c.ws === ws);
             if (idx > -1) conns.splice(idx, 1);
-            session.participants.delete(userName);
-            broadcastToSession(sessionId, { type: 'participant_left', userName, timestamp: new Date().toISOString() });
-            if (session.participants.size === 0) {
-                sessions.delete(sessionId);
-                sessionConnections.delete(sessionId);
+
+            // Check if the user has any other active connections before removing them.
+            const stillConnected = conns.some(c => c.userName === userName && c.ws.readyState === 1);
+            if (!stillConnected) {
+                // Grace period: wait 15s before removing in case client is reconnecting.
+                if (!session._disconnectTimers) session._disconnectTimers = new Map();
+                const timerKey = `${sessionId}:${userName}`;
+                if (session._disconnectTimers.has(timerKey)) clearTimeout(session._disconnectTimers.get(timerKey));
+                session._disconnectTimers.set(timerKey, setTimeout(() => {
+                    const activeConns = (sessionConnections.get(sessionId) || []).filter(c => c.userName === userName && c.ws.readyState === 1);
+                    if (activeConns.length === 0) {
+                        session.participants.delete(userName);
+                        broadcastToSession(sessionId, { type: 'participant_left', userName, timestamp: new Date().toISOString() });
+                        broadcastToSession(sessionId, { type: 'participants_update', participants: Array.from(session.participants.values()) });
+                        if (session.participants.size === 0) {
+                            sessions.delete(sessionId);
+                            sessionConnections.delete(sessionId);
+                        }
+                    }
+                }, 15000));
             }
         }
     });

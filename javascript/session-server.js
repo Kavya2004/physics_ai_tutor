@@ -412,6 +412,14 @@ wss.on("connection", (ws, req) => {
         case "join":
           userName = message.userName;
           isHost = message.isHost;
+          // Cancel any pending disconnect timer for this user (they're reconnecting).
+          if (session._disconnectTimers) {
+            const timerKey = `${sessionId}:${userName}`;
+            if (session._disconnectTimers.has(timerKey)) {
+              clearTimeout(session._disconnectTimers.get(timerKey));
+              session._disconnectTimers.delete(timerKey);
+            }
+          }
           // Update avatar/color from the WS join message (more up-to-date than HTTP join)
           if (session.participants.has(userName)) {
             const participant = session.participants.get(userName);
@@ -526,6 +534,14 @@ wss.on("connection", (ws, req) => {
 
         case "leave":
           if (userName) {
+            // Cancel any pending disconnect timer.
+            if (session._disconnectTimers) {
+              const timerKey = `${sessionId}:${userName}`;
+              if (session._disconnectTimers.has(timerKey)) {
+                clearTimeout(session._disconnectTimers.get(timerKey));
+                session._disconnectTimers.delete(timerKey);
+              }
+            }
             session.removeParticipant(userName);
 
             broadcastToSession(
@@ -537,6 +553,11 @@ wss.on("connection", (ws, req) => {
               },
               ws,
             );
+
+            broadcastToSession(sessionId, {
+              type: "participants_update",
+              participants: session.getParticipantsList(),
+            });
 
             console.log(`${userName} left session ${sessionId}`);
           }
@@ -562,34 +583,63 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     if (userName) {
+      // Remove only this specific WS connection from the pool.
+      // Do NOT remove the participant from session.participants yet — they may
+      // be reconnecting (client uses exponential-backoff auto-reconnect).
       const connections = sessionConnections.get(sessionId) || [];
       const index = connections.findIndex((conn) => conn.ws === ws);
       if (index > -1) {
         connections.splice(index, 1);
       }
 
-      session.removeParticipant(userName);
+      // Check if the participant has any other active connections.
+      // If not, mark them as disconnected and schedule a grace-period removal.
+      const stillConnected = connections.some(
+        (conn) => conn.userName === userName && conn.ws.readyState === WebSocket.OPEN
+      );
 
-      broadcastToSession(sessionId, {
-        type: "participant_left",
-        userName: userName,
-        timestamp: new Date().toISOString(),
-      });
+      if (!stillConnected) {
+        // Give the client 15 seconds to reconnect before removing them.
+        const disconnectTimer = setTimeout(() => {
+          // Only remove if they still have no active connections after the grace period.
+          const activeConns = (sessionConnections.get(sessionId) || []).filter(
+            (conn) => conn.userName === userName && conn.ws.readyState === WebSocket.OPEN
+          );
+          if (activeConns.length === 0) {
+            session.removeParticipant(userName);
 
-      // Broadcast the updated participant list so all remaining clients
-      // show the correct count immediately after someone leaves.
-      broadcastToSession(sessionId, {
-        type: "participants_update",
-        participants: session.getParticipantsList(),
-      });
+            broadcastToSession(sessionId, {
+              type: "participant_left",
+              userName: userName,
+              timestamp: new Date().toISOString(),
+            });
 
-      console.log(`${userName} disconnected from session ${sessionId}`);
+            broadcastToSession(sessionId, {
+              type: "participants_update",
+              participants: session.getParticipantsList(),
+            });
 
-      if (session.participants.size === 0) {
-        sessions.delete(sessionId);
-        sessionConnections.delete(sessionId);
-        console.log(`Session ${sessionId} cleaned up (empty)`);
+            console.log(`${userName} removed from session ${sessionId} after disconnect timeout`);
+
+            if (session.participants.size === 0) {
+              sessions.delete(sessionId);
+              sessionConnections.delete(sessionId);
+              console.log(`Session ${sessionId} cleaned up (empty)`);
+            }
+          }
+        }, 15000); // 15-second grace period for reconnection
+
+        // Cancel the timer if this same userName reconnects before it fires.
+        // We store timers keyed by sessionId+userName so a fresh connection can clear it.
+        if (!session._disconnectTimers) session._disconnectTimers = new Map();
+        const timerKey = `${sessionId}:${userName}`;
+        if (session._disconnectTimers.has(timerKey)) {
+          clearTimeout(session._disconnectTimers.get(timerKey));
+        }
+        session._disconnectTimers.set(timerKey, disconnectTimer);
       }
+
+      console.log(`${userName} WS closed for session ${sessionId}`);
     }
   });
 
@@ -613,6 +663,24 @@ setInterval(
   },
   60 * 60 * 1000,
 ); 
+
+// Periodic participant sync — every 10 seconds, push the current participant
+// list to all active connections so counts self-correct even if a WS message
+// was lost during a reconnect or network hiccup.
+setInterval(() => {
+  sessions.forEach((session, sessionId) => {
+    const connections = sessionConnections.get(sessionId) || [];
+    if (connections.length === 0) return;
+    const participantList = session.getParticipantsList();
+    connections.forEach(({ ws }) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'participants_update', participants: participantList }));
+        } catch (_) {}
+      }
+    });
+  });
+}, 10000);
 
 app.get("/dashboard", async (req, res) => {
   try {
