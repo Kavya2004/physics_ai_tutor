@@ -374,17 +374,19 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON objec
   ]
 }`;
 
+            console.log('[Quiz] Prompt length:', promptContent.length, '| difficulty:', difficulty);
             const response = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: [{ role: 'user', content: promptContent }] })
             });
 
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(`API error ${response.status}: ${errData.message || errData.error || response.statusText}`);
-            }
             const data = await response.json();
+            console.log('[Quiz] API status:', response.status, '| data:', JSON.stringify(data).slice(0, 500));
+
+            if (!response.ok || data.error) {
+                throw new Error(`API error ${response.status}: ${data.message || data.error || response.statusText}`);
+            }
 
             if (window.hideLoading) window.hideLoading();
             else if (loadingIndicator) loadingIndicator.style.display = 'none';
