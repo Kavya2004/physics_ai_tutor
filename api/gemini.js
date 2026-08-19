@@ -120,9 +120,16 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      if (!generatedText) {
+      // gemini-2.5-flash is a thinking model — parts[0] may be the thought,
+      // parts[1] (or later) is the actual text output. Collect all text parts.
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const generatedText = parts
+          .filter(p => p.text && !p.thought)
+          .map(p => p.text)
+          .join('') || parts.map(p => p.text || '').join('');
+      
+      if (!generatedText.trim()) {
           throw new Error('No response generated from Gemini');
       }
 

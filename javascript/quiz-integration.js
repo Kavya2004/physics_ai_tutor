@@ -380,11 +380,16 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON objec
                 body: JSON.stringify({ messages: [{ role: 'user', content: promptContent }] })
             });
 
-            if (!response.ok) throw new Error(`API error: ${response.status}`);
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(`API error ${response.status}: ${errData.message || errData.error || response.statusText}`);
+            }
             const data = await response.json();
 
             if (window.hideLoading) window.hideLoading();
             else if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+            console.log('[Quiz] Raw Gemini response:', data.response);
 
             try {
                 let jsonStr = data.response.trim();
@@ -399,17 +404,17 @@ IMPORTANT: ALL questions must be about "${topic}" ONLY. Return ONLY a JSON objec
                 if (jsonMatch) jsonStr = jsonMatch[0];
 
                 const parsed = JSON.parse(jsonStr);
-                // Ensure difficulty is set correctly (Gemini sometimes ignores it)
                 parsed.difficulty = difficulty;
                 if (!parsed.questions || parsed.questions.length === 0) {
                     throw new Error('No questions in response');
                 }
                 quizSystem.startQuiz(parsed);
             } catch (e) {
-                console.error('Quiz JSON parse error:', e.message, '\nRaw response:', data.response?.slice(0, 300));
+                console.error('[Quiz] JSON parse error:', e.message);
+                console.error('[Quiz] Full raw response:', data.response);
                 const fallback = this.parseAIResponseToQuiz(data.response, topic, difficulty);
                 if (!fallback.questions || fallback.questions.length === 0) {
-                    throw new Error('Could not parse quiz from AI response');
+                    throw new Error(`Could not parse quiz. Raw response logged to console.`);
                 }
                 quizSystem.startQuiz(fallback);
             }
