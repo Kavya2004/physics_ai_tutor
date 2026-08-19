@@ -724,12 +724,44 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 		}).join('');
 	}
 
-	content.innerHTML = displayText
+	// Extract inline image markers ([IMAGE:data:...]) before HTML rendering
+	const inlineImages = [];
+	let textWithoutImages = displayText.replace(/\[IMAGE:(data:[^\]]+)\]/g, (_, dataUrl) => {
+		inlineImages.push(dataUrl);
+		return '';
+	});
+
+	content.innerHTML = textWithoutImages
 	.replace(/\n/g, '<br>')
 	.replace(/<https?:\/\/[^>]+>/g, (match) => {
 		const url = match.slice(1, -1);
 		return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
 	});
+
+	// Render any persisted images (shown when replaying history)
+	if (inlineImages.length > 0) {
+		const imagesDiv = document.createElement('div');
+		imagesDiv.className = 'message-inline-images';
+		imagesDiv.style.cssText = 'margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;';
+		inlineImages.forEach(dataUrl => {
+			const img = document.createElement('img');
+			img.src = dataUrl;
+			img.style.cssText = 'max-width: 220px; max-height: 180px; border-radius: 6px; border: 1px solid #ddd; cursor: pointer; object-fit: contain;';
+			img.title = 'Click to view full size';
+			img.onclick = () => {
+				const modal = document.createElement('div');
+				modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;';
+				const fullImg = document.createElement('img');
+				fullImg.src = dataUrl;
+				fullImg.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px;';
+				modal.appendChild(fullImg);
+				modal.onclick = () => modal.remove();
+				document.body.appendChild(modal);
+			};
+			imagesDiv.appendChild(img);
+		});
+		content.appendChild(imagesDiv);
+	}
 
 	if (citationHTML) {
 		const pill = document.createElement('div');
@@ -794,7 +826,17 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 	// Persist to MongoDB (skip when replaying history)
 	if (!silent && window.chatHistoryManager) {
 		const userName = (window.sessionManager && window.sessionManager.userName) || '';
-		window.chatHistoryManager.appendMessage(sender === 'bot' ? 'bot' : 'user', text, userName);
+		// For user messages with images, embed image data URLs inline so they
+		// are visible when the conversation is loaded from history.
+		let contentToStore = text;
+		if (sender === 'user' && files && files.length > 0) {
+			const imageTags = files
+				.filter(f => f.type && f.type.startsWith('image/') && f.data)
+				.map(f => `\n[IMAGE:${f.data}]`)
+				.join('');
+			if (imageTags) contentToStore = text + imageTags;
+		}
+		window.chatHistoryManager.appendMessage(sender === 'bot' ? 'bot' : 'user', contentToStore, userName);
 	}
 
 }
