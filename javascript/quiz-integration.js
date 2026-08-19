@@ -38,7 +38,7 @@ class QuizIntegration {
         if (lowerMessage.includes('quiz') || lowerMessage.includes('test') || lowerMessage.includes('assessment')) {
             // Check for difficulty level in message
             let difficulty = 'easy';
-            if (lowerMessage.includes('hard') || lowerMessage.includes('difficult') || lowerMessage.includes('challenging') || lowerMessage.includes('timed')) {
+            if (lowerMessage.includes('hard') || lowerMessage.includes('difficult') || lowerMessage.includes('challenging')) {
                 difficulty = 'hard';
             } else if (lowerMessage.includes('medium') || lowerMessage.includes('intermediate')) {
                 difficulty = 'medium';
