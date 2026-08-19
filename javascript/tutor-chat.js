@@ -1773,24 +1773,100 @@ async function generateAIDiagram(description, targetBoard = 'teacher') {
 }
 
 function saveChatHistory() {
-	const messages = document.querySelectorAll('.message');
-	let chatHistory = 'Physics Tutor Chat History\n';
-	chatHistory += '================================\n\n';
+	if (!window.jspdf) {
+		alert('PDF library not loaded yet. Please try again in a moment.');
+		return;
+	}
 
-	messages.forEach((message, index) => {
-		const isBot = message.classList.contains('bot-message');
-		const content = message.querySelector('.message-content').textContent;
-		const sender = isBot ? 'Tutor' : 'Student';
-		chatHistory += `${sender}: ${content}\n\n`;
+	const { jsPDF } = window.jspdf;
+	const doc = new jsPDF();
+
+	const pageWidth  = doc.internal.pageSize.width;
+	const pageHeight = doc.internal.pageSize.height;
+	const margin     = 15;
+	const maxWidth   = pageWidth - margin * 2;
+	let y            = 20;
+
+	// ── Header ──────────────────────────────────────────────────────────────
+	doc.setFillColor(136, 28, 28);          // maroon
+	doc.rect(0, 0, pageWidth, 28, 'F');
+
+	doc.setTextColor(255, 255, 255);
+	doc.setFontSize(16);
+	doc.setFont(undefined, 'bold');
+	doc.text('Physics 131 — Tutor Chat Notes', margin, 18);
+	y = 36;
+
+	// Date subtitle
+	doc.setTextColor(100, 100, 100);
+	doc.setFontSize(9);
+	doc.setFont(undefined, 'normal');
+	doc.text(`Saved: ${new Date().toLocaleString()}`, margin, y);
+	y += 10;
+
+	// Divider
+	doc.setDrawColor(220, 220, 220);
+	doc.line(margin, y, pageWidth - margin, y);
+	y += 8;
+
+	// ── Messages ────────────────────────────────────────────────────────────
+	const messages = document.querySelectorAll('.message');
+
+	messages.forEach((message) => {
+		const isBot    = message.classList.contains('bot-message');
+		const label    = isBot ? 'Tutor' : 'Student';
+		const rawText  = message.querySelector('.message-content')?.innerText || '';
+
+		// Label pill colour
+		if (isBot) {
+			doc.setFillColor(136, 28, 28);   // maroon for tutor
+		} else {
+			doc.setFillColor(30, 100, 200);  // blue for student
+		}
+
+		// Label
+		doc.setFontSize(9);
+		doc.setFont(undefined, 'bold');
+		doc.setTextColor(255, 255, 255);
+		doc.roundedRect(margin, y - 4, 22, 7, 2, 2, 'F');
+		doc.text(label, margin + 2, y + 1);
+
+		y += 9;
+
+		// Body text
+		doc.setTextColor(30, 30, 30);
+		doc.setFontSize(10);
+		doc.setFont(undefined, 'normal');
+
+		const lines = doc.splitTextToSize(rawText.trim(), maxWidth);
+		lines.forEach((line) => {
+			if (y > pageHeight - 20) {
+				doc.addPage();
+				y = 20;
+			}
+			doc.text(line, margin, y);
+			y += 5.5;
+		});
+
+		// Check for inline images saved in the DOM
+		message.querySelectorAll('.message-inline-images img').forEach((img) => {
+			try {
+				const imgWidth  = maxWidth;
+				const imgHeight = Math.min(80, imgWidth * (img.naturalHeight / (img.naturalWidth || 1)));
+				if (y + imgHeight > pageHeight - 20) { doc.addPage(); y = 20; }
+				doc.addImage(img.src, 'PNG', margin, y, imgWidth, imgHeight);
+				y += imgHeight + 4;
+			} catch (_) { /* skip unrenderable images */ }
+		});
+
+		y += 6;  // gap between messages
+
+		// Page break guard
+		if (y > pageHeight - 20) { doc.addPage(); y = 20; }
 	});
 
-	const blob = new Blob([chatHistory], { type: 'text/plain' });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement('a');
-	a.href = url;
-	a.download = `tutor-chat-${new Date().toISOString().slice(0, 10)}.txt`;
-	a.click();
-	URL.revokeObjectURL(url);
+	const dateStr = new Date().toISOString().slice(0, 10);
+	doc.save(`physics-131-notes-${dateStr}.pdf`);
 }
 
 async function generateChatSummary() {
