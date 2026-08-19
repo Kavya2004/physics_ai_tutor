@@ -810,6 +810,7 @@ class SessionManager {
         }),
       );
       this.startHeartbeat();
+      this.startParticipantPolling();
     };
 
     this.ws.onmessage = (event) => {
@@ -824,6 +825,7 @@ class SessionManager {
 
     this.ws.onclose = () => {
       this.stopHeartbeat();
+      this.stopParticipantPolling();
       if (this.sessionId) {
         this._reconnectAttempts++;
         const delay = Math.min(1000 * 2 ** this._reconnectAttempts, 30000);
@@ -858,6 +860,35 @@ class SessionManager {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+  }
+
+  startParticipantPolling() {
+    this.stopParticipantPolling();
+    // Poll the session every 8 seconds as a fallback for missed WS broadcasts.
+    this._participantPollInterval = setInterval(async () => {
+      if (!this.sessionId) return;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/sessions/${this.sessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.participants && Array.isArray(data.participants)) {
+          // Only update if the count differs to avoid unnecessary re-renders.
+          const incoming = data.participants.length;
+          const current = this.participants.size;
+          if (incoming !== current) {
+            console.log(`[poll] count changed ${current} → ${incoming}`);
+            this.updateParticipants(data.participants);
+          }
+        }
+      } catch (_) {}
+    }, 8000);
+  }
+
+  stopParticipantPolling() {
+    if (this._participantPollInterval) {
+      clearInterval(this._participantPollInterval);
+      this._participantPollInterval = null;
     }
   }
 
@@ -1014,7 +1045,7 @@ class SessionManager {
     const time = new Date(timestamp).toLocaleTimeString();
 
     let displayText = message;
-    if (sender === 'bot' && window.convertLatexToUnicode) {
+    if (window.convertLatexToUnicode) {
       displayText = window.convertLatexToUnicode(message);
     }
 
@@ -1143,6 +1174,7 @@ class SessionManager {
   }
 
   updateParticipants(participants) {
+    console.log('[updateParticipants] received', participants.length, 'participants:', participants.map(p => p.userName));
     this.participants.clear();
     participants.forEach((p) => this.participants.set(p.userName, p));
     this.renderParticipants();
@@ -1165,6 +1197,7 @@ class SessionManager {
     }
 
     // Update the count badge regardless of whether the dropdown exists
+    console.log('[updateInClassBanner] size=', allParticipants.size, 'keys=', [...allParticipants.keys()]);
     countEl.textContent = `Participants (${allParticipants.size})`;
 
     if (innerEl) {
@@ -1687,6 +1720,7 @@ class SessionManager {
     }
 
     this.stopHeartbeat();
+    this.stopParticipantPolling();
     this.currentSession = null;
     this.sessionId = null;
     this.currentSessionTitle = null;

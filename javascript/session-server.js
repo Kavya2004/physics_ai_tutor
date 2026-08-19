@@ -467,14 +467,17 @@ wss.on("connection", (ws, req) => {
 
           // Broadcast the full updated participant list to ALL clients including
           // the new joiner so every participant's count stays in sync.
-          broadcastToSession(
-            sessionId,
-            {
-              type: "participants_update",
-              participants: session.getParticipantsList(),
-            },
-            // no excludeWs — send to everyone, including the new joiner
-          );
+          {
+            const allConns = sessionConnections.get(sessionId) || [];
+            const participantList = session.getParticipantsList();
+            console.log(`[participants_update] session=${sessionId} total_connections=${allConns.length} participants=${participantList.map(p=>p.userName)}`);
+            allConns.forEach(({ ws: connWs, userName: connUser }) => {
+              console.log(`  → sending to ${connUser} readyState=${connWs.readyState}`);
+              if (connWs.readyState === WebSocket.OPEN) {
+                connWs.send(JSON.stringify({ type: 'participants_update', participants: participantList }));
+              }
+            });
+          }
 
           console.log(`${userName} connected to session ${sessionId}`);
           break;
