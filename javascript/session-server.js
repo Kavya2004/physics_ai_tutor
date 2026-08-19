@@ -457,15 +457,15 @@ wss.on("connection", (ws, req) => {
             ws, // exclude the new joiner
           );
 
-          // Broadcast the full updated participant list to ALL existing clients
-          // so their count and names update immediately
+          // Broadcast the full updated participant list to ALL clients including
+          // the new joiner so every participant's count stays in sync.
           broadcastToSession(
             sessionId,
             {
               type: "participants_update",
               participants: session.getParticipantsList(),
             },
-            ws, // new joiner already has the list via session_info
+            // no excludeWs — send to everyone, including the new joiner
           );
 
           console.log(`${userName} connected to session ${sessionId}`);
@@ -574,6 +574,13 @@ wss.on("connection", (ws, req) => {
         type: "participant_left",
         userName: userName,
         timestamp: new Date().toISOString(),
+      });
+
+      // Broadcast the updated participant list so all remaining clients
+      // show the correct count immediately after someone leaves.
+      broadcastToSession(sessionId, {
+        type: "participants_update",
+        participants: session.getParticipantsList(),
       });
 
       console.log(`${userName} disconnected from session ${sessionId}`);

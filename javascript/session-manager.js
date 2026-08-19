@@ -1154,17 +1154,20 @@ class SessionManager {
     const innerEl = document.getElementById('inClassParticipantsInner');
     if (!countEl) return;
 
-    if (innerEl) {
-      // Always include the current user, even if not yet in the participants map
-      const allParticipants = new Map(this.participants);
-      if (this.userName && !allParticipants.has(this.userName)) {
-        allParticipants.set(this.userName, {
-          userName: this.userName,
-          avatar: this.selectedAvatar || '👤',
-          color: this.selectedColor || '#6c757d',
-        });
-      }
+    // Always include the current user, even if not yet in the participants map
+    const allParticipants = new Map(this.participants);
+    if (this.userName && !allParticipants.has(this.userName)) {
+      allParticipants.set(this.userName, {
+        userName: this.userName,
+        avatar: this.selectedAvatar || '👤',
+        color: this.selectedColor || '#6c757d',
+      });
+    }
 
+    // Update the count badge regardless of whether the dropdown exists
+    countEl.textContent = `Participants (${allParticipants.size})`;
+
+    if (innerEl) {
       if (allParticipants.size === 0) {
         innerEl.innerHTML = `<div style="padding:8px 10px;font-size:12px;color:#999;text-align:center;">No students yet</div>`;
       } else {
@@ -1184,9 +1187,6 @@ class SessionManager {
           `;
         }).join('');
       }
-
-      // Keep count in sync with the full list
-      countEl.textContent = `Participants (${allParticipants.size})`;
     }
   }
 
