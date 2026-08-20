@@ -36,20 +36,23 @@ Do not volunteer complete derivations or full concept explanations unless the st
 
 Focus on core introductory physics topics.`;
 
-const DIDACTIC_SYSTEM = `You are an AI physics tutor in Didactic mode. The student has worked through the problem with you and has now asked for a direct, complete explanation.
+const DIDACTIC_SYSTEM = `You are an AI physics tutor in Didactic mode. The student worked through the Socratic phase and has chosen to receive a direct, complete explanation.
 
 ━━━ DIDACTIC MODE — MANDATORY RULES ━━━
 
-RULE 1 — GIVE THE FULL EXPLANATION:
-Provide a clear, step-by-step explanation. Show all relevant reasoning, equations, and derivations. Leave nothing ambiguous.
+RULE 1 — GIVE THE DIRECT ANSWER FIRST, THEN EXPLAIN:
+Lead with the answer immediately. Then walk through a clear, step-by-step explanation with all reasoning, equations, and derivations.
 
-RULE 2 — REFERENCE PRIOR EXCHANGES:
-Acknowledge what the student already figured out during the Socratic phase before you fill in the remaining gaps.
+RULE 2 — USE THE EXACT PROBLEM:
+Solve the specific problem the student was working on — use the exact numbers and scenario. Do NOT give a generic textbook explanation.
 
-RULE 3 — WARM AND DIRECT:
-Be encouraging. The student earned this explanation. Keep the tone supportive and clear.
+RULE 3 — REFERENCE PRIOR EXCHANGES:
+Acknowledge what the student already figured out during the Socratic phase, then fill in the gaps.
 
-RULE 4 — USE COURSE MATERIALS:
+RULE 4 — STOP AFTER THE ANSWER:
+Do NOT end with a follow-up question. Do NOT ask the student to reflect or reason further. Do NOT append any "reply D / reply S" prompt. Give the complete answer and stop.
+
+RULE 5 — USE COURSE MATERIALS:
 Ground your explanation in the provided COURSE MATERIALS context wherever possible.
 
 Focus on core introductory physics topics.`;
@@ -1513,31 +1516,28 @@ async function processUserMessage(message) {
 
 		}
 
-	// ── S-DO mode logic (PRE-CALL) ──────────────────────────────────────────
-	// Detect the student's choice BEFORE calling Gemini so the API call uses
-	// the right system prompt and the right instruction.
-	// When the student replies "D" we DON'T want Gemini to answer "D" in
-	// Socratic mode — we want a full didactic explanation of the ORIGINAL problem.
-	let didacticTrigger = false;
+	// ── S-DO choice detection (PRE-CALL) ────────────────────────────────────
+	// Only fires when the tutor's S-DO offer is showing (pending_choice).
+	// "D" → one-shot didactic answer for the original problem, then back to Socratic.
+	// "S" or anything else → stay Socratic, reset counter.
 	if (teachingMode === 'pending_choice') {
 		const reply = userMessage.trim().toUpperCase();
 		if (reply === 'D') {
-			didacticTrigger = true;
 			teachingMode = 'didactic';
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
-			// 1. Strip the S-DO offer text from the last assistant message in context
-			//    so Gemini doesn't see it as a pattern to repeat.
+			// Strip the S-DO offer text from the last assistant message so Gemini
+			// doesn't treat it as a pattern to repeat.
 			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
 			for (let i = context.length - 1; i >= 0; i--) {
 				if (context[i].role === 'assistant') {
-					context[i] = { role: 'assistant', content: context[i].content.replace(SDO_PATTERN, '').trim() };
+					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
 					break;
 				}
 			}
 
-			// 2. Append a didactic instruction to the last user message rather than
-			//    replacing it — this preserves any image/file context already there.
+			// Append a didactic instruction to the last user message (not replace it)
+			// so any image / file context already embedded there is preserved.
 			const lastUserIdx = [...context].map((m, i) => ({ m, i }))
 				.filter(({ m }) => m.role === 'user')
 				.at(-1)?.i;
@@ -1545,11 +1545,11 @@ async function processUserMessage(message) {
 				context[lastUserIdx] = {
 					role: 'user',
 					content: context[lastUserIdx].content +
-						'\n\n[The student chose Didactic mode. Give a complete, step-by-step solution to the ORIGINAL problem shown/described above. Use the specific numbers and scenario from that problem — do NOT give a generic answer.]'
+						'\n\n[The student chose a direct explanation. Give a complete, step-by-step solution to the ORIGINAL problem using the exact numbers and scenario above. Do NOT ask a follow-up question — just give the full answer and stop.]'
 				};
 			}
 		} else {
-			// 'S' or anything else — stay Socratic, reset counter
+			// "S" or anything else → stay Socratic, reset so the offer can fire again
 			teachingMode = 'socratic';
 			exchangeRounds = 0;
 			sdoPromptSent = false;
@@ -1570,15 +1570,15 @@ async function processUserMessage(message) {
 		});
 	}
 
-	// In didactic mode: remind Gemini NOT to re-append the S-DO choice prompt
-	// and to stay focused on the specific problem, not a generic explanation.
+	// In didactic mode: reinforce the one-shot rules right before the call
 	if (teachingMode === 'didactic') {
 		context.push({
 			role: 'system',
-			content: `REMINDER — DIDACTIC MODE IS ACTIVE.
-• Give a complete, step-by-step solution using the EXACT numbers and scenario from the original problem.
-• Do NOT give a generic textbook explanation — solve THIS specific problem.
-• Do NOT append any "reply D / reply S" choice prompt. The student already chose. End your response naturally after the solution.`
+			content: `REMINDER — DIDACTIC MODE (ONE SHOT).
+• Give the answer first, then the full step-by-step explanation using the EXACT numbers from the problem.
+• Do NOT end with a follow-up question or ask the student to think further.
+• Do NOT append any "reply D / reply S" prompt.
+• After this response the tutor returns to Socratic mode automatically.`
 		});
 	}
 
@@ -1612,17 +1612,19 @@ async function processUserMessage(message) {
 				context[context.length - 1] = { role: 'assistant', content: botResponse };
 			}
 		} else if (teachingMode === 'didactic') {
-			// The didactic explanation has just been delivered.
-			// Automatically roll back to Socratic and reset the counter so the
-			// cycle starts fresh for the student's next question.
+			// One-shot didactic answer delivered — roll back to Socratic immediately.
+			// Counter resets to 0, so the next S-DO offer fires after another 5 rounds.
 			teachingMode = 'socratic';
 			exchangeRounds = 0;
 			sdoPromptSent = false;
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
-			// Safety net: strip any S-DO offer Gemini still snuck in.
+			// Strip any S-DO offer or Socratic follow-up Gemini appended.
 			const SDO_STRIP = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
-			botResponse = botResponse.replace(SDO_STRIP, '').trim();
+			botResponse = botResponse
+				.replace(SDO_STRIP, '')
+				.replace(/\n+Now[,.]?\s*(let'?s?\s*)?(switch\s*(back\s*to|to)\s*Socratic|return\s*to\s*(the\s*)?Socratic)[^\n]*/gi, '')
+				.trim();
 			context[context.length - 1] = { role: 'assistant', content: botResponse };
 		}
 
