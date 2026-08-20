@@ -940,7 +940,133 @@ class SessionManager {
           }
         }
         break;
+
+      // ── Collective teaching-mode suggestion (host only sees the action toast) ──
+      case 'teaching_mode_suggestion':
+        if (this.isHost) {
+          this.showModeSuggestionToast(data.currentMode, data.suggestedMode, data.exchangeCount);
+        }
+        break;
+
+      // ── Mode was changed by the teacher — update every client's teaching mode ──
+      case 'mode_changed':
+        this.applyClassModeChange(data.newMode, data.changedBy);
+        break;
     }
+  }
+
+  // ── Teacher toast: suggest switching Socratic ↔ Didactic ─────────────────
+  showModeSuggestionToast(currentMode, suggestedMode, exchangeCount) {
+    // Only one suggestion toast at a time
+    const existing = document.getElementById('modeSuggestionToast');
+    if (existing) existing.remove();
+
+    const modeLabel   = suggestedMode === 'didactic' ? 'Didactic (explain directly)' : 'Socratic (guide via questions)';
+    const modeEmoji   = suggestedMode === 'didactic' ? '📖' : '❓';
+    const currentLabel = currentMode === 'socratic' ? 'Socratic' : 'Didactic';
+
+    const toast = document.createElement('div');
+    toast.id = 'modeSuggestionToast';
+    toast.setAttribute('role', 'alertdialog');
+    toast.setAttribute('aria-labelledby', 'modeSuggestionTitle');
+    toast.setAttribute('aria-describedby', 'modeSuggestionDesc');
+    toast.style.cssText = `
+      position: fixed; bottom: 80px; right: 20px; z-index: 9999;
+      background: #fff; border: 2px solid #881c1c; border-radius: 12px;
+      padding: 16px 18px; max-width: 340px; box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+      font-family: inherit; animation: slideInRight 0.3s ease;
+    `;
+
+    toast.innerHTML = `
+      <style>
+        @keyframes slideInRight {
+          from { transform: translateX(120%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+      </style>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <span style="font-size:22px;flex-shrink:0;">🏫</span>
+        <div>
+          <div id="modeSuggestionTitle" style="font-weight:700;font-size:14px;color:#881c1c;margin-bottom:4px;">
+            Teaching Mode Check-in
+          </div>
+          <div id="modeSuggestionDesc" style="font-size:13px;color:#444;line-height:1.45;margin-bottom:12px;">
+            The class has completed <strong>${exchangeCount}</strong> exchanges in
+            <strong>${currentLabel}</strong> mode. Consider switching to
+            ${modeEmoji} <strong>${modeLabel}</strong> to consolidate learning.
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="modeSwitchAccept" style="
+              background:#881c1c;color:white;border:none;padding:7px 14px;
+              border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;">
+              Switch to ${suggestedMode === 'didactic' ? 'Didactic' : 'Socratic'}
+            </button>
+            <button id="modeSwitchDismiss" style="
+              background:#f0f0f0;color:#555;border:none;padding:7px 14px;
+              border-radius:6px;font-size:13px;cursor:pointer;">
+              Keep ${currentLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    document.getElementById('modeSwitchAccept').onclick = () => {
+      this.ackModeSuggestion('accepted', suggestedMode);
+      toast.remove();
+    };
+    document.getElementById('modeSwitchDismiss').onclick = () => {
+      this.ackModeSuggestion('dismissed', currentMode);
+      toast.remove();
+    };
+
+    // Auto-dismiss after 60 seconds if the teacher doesn't interact
+    setTimeout(() => {
+      if (document.getElementById('modeSuggestionToast') === toast) {
+        this.ackModeSuggestion('dismissed', currentMode);
+        toast.remove();
+      }
+    }, 60000);
+  }
+
+  // Send acknowledgement back to server so counter resets
+  ackModeSuggestion(decision, newMode) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'ack_mode_suggestion',
+        decision,
+        newMode,
+        userName: this.userName,
+      }));
+    }
+  }
+
+  // Apply a class-wide mode change on every client
+  applyClassModeChange(newMode, changedBy) {
+    // Update the tutor-chat.js teaching mode so the AI uses the right system prompt
+    if (newMode === 'didactic' && window.teachingMode !== undefined) {
+      window.teachingMode = 'didactic';
+      if (typeof window.getSystemPrompt === 'function' && window.context) {
+        window.context[0] = { role: 'system', content: window.getSystemPrompt() };
+      }
+    } else if (newMode === 'socratic' && window.teachingMode !== undefined) {
+      // Full reset: exchange counter back to 0, back to Socratic
+      if (typeof window.resetTopicTracking === 'function') {
+        window.resetTopicTracking();
+      } else {
+        window.teachingMode = 'socratic';
+        if (window.context) window.context[0] = { role: 'system', content: window.getSystemPrompt() };
+      }
+    }
+
+    // Show a brief system message so everyone knows the mode changed
+    const modeEmoji = newMode === 'didactic' ? '📖' : '❓';
+    const label     = newMode === 'didactic' ? 'Didactic' : 'Socratic';
+    this.addSystemMessage(
+      `${modeEmoji} ${changedBy || 'The teacher'} switched the class to ${label} mode.`
+    );
   }
 
   shareMessage(message, sender = "user", files = [], citations = []) {

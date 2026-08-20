@@ -127,6 +127,9 @@ app.get('/api/pdf-image', async (req, res) => {
     res.status(500).json({ error: 'Failed to render page: ' + err.message });
   }
 });
+// How many collective bot replies before suggesting a mode switch to the teacher.
+const CLASS_EXCHANGE_THRESHOLD = 10;
+
 class TutorSession {
   constructor(sessionId, hostName, isPublic = true, sessionTitle = '') {
     this.sessionId = sessionId;
@@ -138,6 +141,14 @@ class TutorSession {
     this.whiteboardActions = [];
     this.createdAt = new Date();
     this.lastActivity = new Date();
+
+    // ── Collective teaching-mode suggestion counter ───────────────────────
+    // Counts total bot replies across ALL students in this session.
+    // Every CLASS_EXCHANGE_THRESHOLD bot replies the host is prompted to
+    // consider switching Socratic ↔ Didactic.
+    this.classExchangeCount = 0;
+    this.classSuggestionPending = false;  // true while suggestion is showing
+    this.currentTeachingMode = 'socratic'; // tracks what the class is currently doing
 
     this.participants.set(hostName, {
       userName: hostName,
@@ -503,6 +514,26 @@ wss.on("connection", (ws, req) => {
               citations: message.citations || [],
             });
 
+            // ── Collective exchange counter ───────────────────────────────
+            // Every bot reply counts as one completed exchange for the class.
+            // Once the threshold is reached (and no suggestion is already
+            // pending), send a teaching_mode_suggestion to ALL participants.
+            // The host's client shows a prompt; students see a system notice.
+            if (message.sender === 'bot' && !session.classSuggestionPending) {
+              session.classExchangeCount++;
+              if (session.classExchangeCount >= CLASS_EXCHANGE_THRESHOLD) {
+                session.classSuggestionPending = true;
+                const suggestMode = session.currentTeachingMode === 'socratic' ? 'didactic' : 'socratic';
+                broadcastToSession(sessionId, {
+                  type: 'teaching_mode_suggestion',
+                  currentMode: session.currentTeachingMode,
+                  suggestedMode: suggestMode,
+                  exchangeCount: session.classExchangeCount,
+                });
+                console.log(`[class-mode] suggestion fired for session ${sessionId} after ${session.classExchangeCount} exchanges`);
+              }
+            }
+
             console.log(
               `Message in session ${sessionId} from ${userName}: ${message.message.substring(0, 50)}...`,
             );
@@ -532,6 +563,28 @@ wss.on("connection", (ws, req) => {
             console.log(
               `Whiteboard action in session ${sessionId} from ${userName}: ${message.action}`,
             );
+          }
+          break;
+
+        // ── Teacher acknowledges the mode-switch suggestion ─────────────
+        // Sent by the host client when they accept or dismiss the toast.
+        // 'accepted' → broadcast a class-wide notice + flip currentTeachingMode.
+        // 'dismissed' → just reset so the counter can fire again next cycle.
+        case "ack_mode_suggestion":
+          if (isHost) {
+            session.classSuggestionPending = false;
+            session.classExchangeCount = 0;
+            if (message.decision === 'accepted') {
+              session.currentTeachingMode = message.newMode || (session.currentTeachingMode === 'socratic' ? 'didactic' : 'socratic');
+              broadcastToSession(sessionId, {
+                type: 'mode_changed',
+                newMode: session.currentTeachingMode,
+                changedBy: userName,
+              });
+              console.log(`[class-mode] mode switched to ${session.currentTeachingMode} in session ${sessionId}`);
+            } else {
+              console.log(`[class-mode] suggestion dismissed in session ${sessionId}, counter reset`);
+            }
           }
           break;
 

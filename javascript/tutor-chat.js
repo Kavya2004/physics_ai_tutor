@@ -124,6 +124,20 @@ function initializeChat() {
     window.processUserMessage = processUserMessage;
     window.initializeChat = initializeChat;
 
+    // Expose teaching-mode state so session-manager can apply class-wide mode changes
+    window.getSystemPrompt = getSystemPrompt;
+    window.resetTopicTracking = resetTopicTracking;
+    Object.defineProperty(window, 'teachingMode', {
+      get: () => teachingMode,
+      set: (v) => { teachingMode = v; },
+      configurable: true,
+    });
+    Object.defineProperty(window, 'context', {
+      get: () => context,
+      set: (v) => { context = v; },
+      configurable: true,
+    });
+
     // Allow external code (e.g. whiteboard) to inject a File into the upload queue
     window.injectFileIntoChat = function (file) {
         uploadedFiles.push(file);
