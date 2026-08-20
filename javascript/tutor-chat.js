@@ -1561,11 +1561,21 @@ async function processUserMessage(message) {
 		});
 	}
 
+	// In didactic mode: remind Gemini NOT to re-append the S-DO choice prompt
+	if (teachingMode === 'didactic') {
+		context.push({
+			role: 'system',
+			content: `REMINDER — DIDACTIC MODE IS ACTIVE. Give the full, complete explanation now.
+IMPORTANT: Do NOT append any "reply D / reply S" choice prompt at the end of your response. The student already made their choice. Just give the explanation and end naturally.`
+		});
+	}
+
 		// Get AI response with files (only if files processed successfully)
 		let botResponse = await getGeminiResponse(context, processedFiles.length > 0 ? processedFiles : []);
 
 		// Remove the reinforcement message from context after use (it's ephemeral)
-		if (context[context.length - 1]?.content?.startsWith('REMINDER — SOCRATIC')) {
+		if (context[context.length - 1]?.content?.startsWith('REMINDER — SOCRATIC') ||
+		    context[context.length - 1]?.content?.startsWith('REMINDER — DIDACTIC')) {
 			context.pop();
 		}
 
@@ -1597,6 +1607,15 @@ async function processUserMessage(message) {
 			exchangeRounds = 0;
 			sdoPromptSent = false;
 			context[0] = { role: 'system', content: getSystemPrompt() };
+
+			// Gemini sometimes echoes the S-DO prompt from prior context.
+			// Strip any trailing "reply D / reply S" offer from the didactic answer.
+			botResponse = botResponse
+				.replace(/\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/gi, '')
+				.replace(/would you like me to give you the answer directly[\s\S]*?step by step\?/gi, '')
+				.trim();
+			// Keep context in sync with the cleaned response
+			context[context.length - 1] = { role: 'assistant', content: botResponse };
 		}
 
 		// Manage context size
