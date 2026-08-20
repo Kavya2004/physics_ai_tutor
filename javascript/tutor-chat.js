@@ -1456,11 +1456,30 @@ async function processUserMessage(message) {
 				window._pendingContextUpdate.forEach(entry => context.push(entry));
 				window._pendingContextUpdate = [];
 			}
-			// Append current message attributed to this student
-			context.push({ role: 'user', content: `${window.sessionManager.userName}: ${userMessage}` });
+		}
+
+		// Build a context-safe description of any uploaded files so future turns
+		// remember what was in the image (the binary is only sent once to Gemini).
+		let fileContextSuffix = '';
+		if (processedFiles.length > 0) {
+			const fileParts = processedFiles.map(f => {
+				if (f.type && f.type.startsWith('image/')) {
+					const ocrNote = f.ocrText
+						? `\n[Extracted text from image: ${f.ocrText.slice(0, 800)}]`
+						: '';
+					return `[Student uploaded an image: ${f.name}]${ocrNote}`;
+				}
+				return `[Student attached a file: ${f.name} (${f.type})]`;
+			});
+			fileContextSuffix = '\n' + fileParts.join('\n');
+		}
+
+		// Append current message to context
+		if (window.sessionManager?.sessionId) {
+			context.push({ role: 'user', content: `${window.sessionManager.userName}: ${userMessage}${fileContextSuffix}` });
 		} else {
 			// Not in session — just add current message
-			context.push({ role: 'user', content: userMessage });
+			context.push({ role: 'user', content: `${userMessage}${fileContextSuffix}` });
 		}
 		// Search for matching physics textbook sections
 		const searchResults = await searchPhysicsTextbook(userMessage || message);
