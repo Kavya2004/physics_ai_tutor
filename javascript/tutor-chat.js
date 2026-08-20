@@ -1526,17 +1526,26 @@ async function processUserMessage(message) {
 			teachingMode = 'didactic';
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
-			// Replace the last user message in context with an explicit instruction
-			// to explain the original problem — not to process the letter "D".
-			// The original problem is everything in the conversation before the
-			// S-DO choice prompt, so we tell Gemini to look back and explain it.
+			// 1. Strip the S-DO offer text from the last assistant message in context
+			//    so Gemini doesn't see it as a pattern to repeat.
+			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			for (let i = context.length - 1; i >= 0; i--) {
+				if (context[i].role === 'assistant') {
+					context[i] = { role: 'assistant', content: context[i].content.replace(SDO_PATTERN, '').trim() };
+					break;
+				}
+			}
+
+			// 2. Append a didactic instruction to the last user message rather than
+			//    replacing it — this preserves any image/file context already there.
 			const lastUserIdx = [...context].map((m, i) => ({ m, i }))
 				.filter(({ m }) => m.role === 'user')
 				.at(-1)?.i;
 			if (lastUserIdx !== undefined) {
 				context[lastUserIdx] = {
 					role: 'user',
-					content: 'The student chose to receive a full explanation (Didactic mode). Please now give a complete, step-by-step explanation of the original problem we have been working on together. Address everything we discussed and fill in any gaps the student had.'
+					content: context[lastUserIdx].content +
+						'\n\n[The student chose Didactic mode. Give a complete, step-by-step solution to the ORIGINAL problem shown/described above. Use the specific numbers and scenario from that problem — do NOT give a generic answer.]'
 				};
 			}
 		} else {
@@ -1562,11 +1571,14 @@ async function processUserMessage(message) {
 	}
 
 	// In didactic mode: remind Gemini NOT to re-append the S-DO choice prompt
+	// and to stay focused on the specific problem, not a generic explanation.
 	if (teachingMode === 'didactic') {
 		context.push({
 			role: 'system',
-			content: `REMINDER — DIDACTIC MODE IS ACTIVE. Give the full, complete explanation now.
-IMPORTANT: Do NOT append any "reply D / reply S" choice prompt at the end of your response. The student already made their choice. Just give the explanation and end naturally.`
+			content: `REMINDER — DIDACTIC MODE IS ACTIVE.
+• Give a complete, step-by-step solution using the EXACT numbers and scenario from the original problem.
+• Do NOT give a generic textbook explanation — solve THIS specific problem.
+• Do NOT append any "reply D / reply S" choice prompt. The student already chose. End your response naturally after the solution.`
 		});
 	}
 
@@ -1608,13 +1620,9 @@ IMPORTANT: Do NOT append any "reply D / reply S" choice prompt at the end of you
 			sdoPromptSent = false;
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
-			// Gemini sometimes echoes the S-DO prompt from prior context.
-			// Strip any trailing "reply D / reply S" offer from the didactic answer.
-			botResponse = botResponse
-				.replace(/\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/gi, '')
-				.replace(/would you like me to give you the answer directly[\s\S]*?step by step\?/gi, '')
-				.trim();
-			// Keep context in sync with the cleaned response
+			// Safety net: strip any S-DO offer Gemini still snuck in.
+			const SDO_STRIP = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			botResponse = botResponse.replace(SDO_STRIP, '').trim();
 			context[context.length - 1] = { role: 'assistant', content: botResponse };
 		}
 
