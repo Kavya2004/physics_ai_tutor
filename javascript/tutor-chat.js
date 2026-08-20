@@ -1513,8 +1513,43 @@ async function processUserMessage(message) {
 
 		}
 
+	// ── S-DO mode logic (PRE-CALL) ──────────────────────────────────────────
+	// Detect the student's choice BEFORE calling Gemini so the API call uses
+	// the right system prompt and the right instruction.
+	// When the student replies "D" we DON'T want Gemini to answer "D" in
+	// Socratic mode — we want a full didactic explanation of the ORIGINAL problem.
+	let didacticTrigger = false;
+	if (teachingMode === 'pending_choice') {
+		const reply = userMessage.trim().toUpperCase();
+		if (reply === 'D') {
+			didacticTrigger = true;
+			teachingMode = 'didactic';
+			context[0] = { role: 'system', content: getSystemPrompt() };
+
+			// Replace the last user message in context with an explicit instruction
+			// to explain the original problem — not to process the letter "D".
+			// The original problem is everything in the conversation before the
+			// S-DO choice prompt, so we tell Gemini to look back and explain it.
+			const lastUserIdx = [...context].map((m, i) => ({ m, i }))
+				.filter(({ m }) => m.role === 'user')
+				.at(-1)?.i;
+			if (lastUserIdx !== undefined) {
+				context[lastUserIdx] = {
+					role: 'user',
+					content: 'The student chose to receive a full explanation (Didactic mode). Please now give a complete, step-by-step explanation of the original problem we have been working on together. Address everything we discussed and fill in any gaps the student had.'
+				};
+			}
+		} else {
+			// 'S' or anything else — stay Socratic, reset counter
+			teachingMode = 'socratic';
+			exchangeRounds = 0;
+			sdoPromptSent = false;
+			context[0] = { role: 'system', content: getSystemPrompt() };
+		}
+	}
+
 	// Reinforce the Socratic rules right before every call (only in Socratic mode)
-	if (teachingMode === 'socratic' || teachingMode === 'pending_choice') {
+	if (teachingMode === 'socratic') {
 		context.push({
 			role: 'system',
 			content: `REMINDER — SOCRATIC MODE IS ACTIVE. You MUST follow ALL rules without exception:
@@ -1535,24 +1570,8 @@ async function processUserMessage(message) {
 		}
 
 		// ── S-DO mode logic ─────────────────────────────────────────────────
-		// Check if student replied to the S-DO choice prompt
-		if (teachingMode === 'pending_choice') {
-			const reply = userMessage.trim().toUpperCase();
-			if (reply === 'D') {
-				// One didactic answer, then automatically roll back to Socratic.
-				// We use a transient flag so the round-counting block below can
-				// detect the rollback after the bot reply is appended.
-				teachingMode = 'didactic';
-				context[0] = { role: 'system', content: getSystemPrompt() };
-			} else {
-				// 'S' or anything else — stay Socratic, reset counter so the
-				// offer comes again after another 5 rounds.
-				teachingMode = 'socratic';
-				exchangeRounds = 0;
-				sdoPromptSent = false;
-				context[0] = { role: 'system', content: getSystemPrompt() };
-			}
-		}
+		// The pending_choice detection and Gemini call are both handled above (PRE-CALL).
+		// Nothing to do here — fall through to round counting.
 
 		// Add bot response to context
 		context.push({ role: 'assistant', content: botResponse });

@@ -515,11 +515,10 @@ wss.on("connection", (ws, req) => {
             });
 
             // ── Collective exchange counter ───────────────────────────────
-            // Every bot reply counts as one completed exchange for the class.
-            // Once the threshold is reached (and no suggestion is already
-            // pending), send a teaching_mode_suggestion to ALL participants.
-            // The host's client shows a prompt; students see a system notice.
-            if (message.sender === 'bot' && !session.classSuggestionPending) {
+            // Count every message (student or bot) toward the class threshold.
+            // Threshold = 5 student messages + 5 bot replies = 10 total.
+            // Once reached (and no suggestion is already pending), prompt the host.
+            if (!session.classSuggestionPending) {
               session.classExchangeCount++;
               if (session.classExchangeCount >= CLASS_EXCHANGE_THRESHOLD) {
                 session.classSuggestionPending = true;
@@ -530,7 +529,7 @@ wss.on("connection", (ws, req) => {
                   suggestedMode: suggestMode,
                   exchangeCount: session.classExchangeCount,
                 });
-                console.log(`[class-mode] suggestion fired for session ${sessionId} after ${session.classExchangeCount} exchanges`);
+                console.log(`[class-mode] suggestion fired for session ${sessionId} after ${session.classExchangeCount} messages`);
               }
             }
 

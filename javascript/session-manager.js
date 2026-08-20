@@ -991,7 +991,7 @@ class SessionManager {
             Teaching Mode Check-in
           </div>
           <div id="modeSuggestionDesc" style="font-size:13px;color:#444;line-height:1.45;margin-bottom:12px;">
-            The class has completed <strong>${exchangeCount}</strong> exchanges in
+            The class has completed <strong>${Math.floor(exchangeCount / 2)}</strong> exchanges (${exchangeCount} messages total) in
             <strong>${currentLabel}</strong> mode. Consider switching to
             ${modeEmoji} <strong>${modeLabel}</strong> to consolidate learning.
           </div>
