@@ -1781,9 +1781,10 @@ async function processUserMessage(message) {
 				}
 			}
 			// On the 5th completed round, append the S-DO choice prompt — but only
-			// if the bot actually asked a guiding question (response ends with '?').
-			// If Gemini gave a full solution anyway, skip the offer to avoid redundancy.
-			const responseIsQuestion = /\?\s*(\*{0,2}|\s*)$/.test(botResponse.trim());
+			// if the bot actually asked a guiding question (not if it gave a full solution).
+			// Check for a '?' anywhere in the last portion of the response, not just the end.
+			const lastChunk = botResponse.trim().slice(-300);
+			const responseIsQuestion = lastChunk.includes('?');
 			if (exchangeRounds === 5 && !sdoPromptSent && responseIsQuestion) {
 				sdoPromptSent = true;
 				teachingMode = 'pending_choice';
