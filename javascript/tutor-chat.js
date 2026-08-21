@@ -8,6 +8,15 @@ let exchangeRounds = 0;        // incremented after each bot reply
 let teachingMode = 'socratic'; // starts in Socratic mode
 let sdoPromptSent = false;     // true once the S-DO choice message has been sent
 
+// Stores the first user message of a Socratic topic so the didactic answer
+// always addresses the original problem, not a later sub-question.
+let originalProblemMessage = null;
+
+// Stores extracted text from a student-uploaded PDF so it can be re-injected
+// as context on every API call without bloating the rolling message window.
+let uploadedPdfText = null;
+let uploadedPdfName = null;
+
 const SOCRATIC_SYSTEM = `You are an AI physics tutor using the Socratic method. Your role is to guide the student to discover answers themselves through carefully sequenced questions — never by giving the answer directly.
 
 ━━━ SOCRATIC MODE — MANDATORY RULES ━━━
@@ -75,6 +84,9 @@ function resetTopicTracking() {
 	exchangeRounds = 0;
 	sdoPromptSent = false;
 	teachingMode = 'socratic';
+	originalProblemMessage = null;
+	uploadedPdfText = null;
+	uploadedPdfName = null;
 	context[0] = { role: 'system', content: getSystemPrompt() };
 }
 
@@ -467,6 +479,27 @@ async function processFilesForTutor(files) {
 				}
 			} catch (ocrError) {
 				fileEntry.ocrText = null;
+			}
+		}
+
+		if (file.type === 'application/pdf') {
+			try {
+				const resp = await fetch('/api/extract-pdf', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ data: base64 }),
+				});
+				if (resp.ok) {
+					const { text } = await resp.json();
+					if (text && text.trim()) {
+						fileEntry.pdfText = text.trim();
+						// Store globally so it can be re-injected on every API call
+						uploadedPdfText = text.trim();
+						uploadedPdfName = file.name;
+					}
+				}
+			} catch (pdfErr) {
+				fileEntry.pdfText = null;
 			}
 		}
 
@@ -1472,6 +1505,10 @@ async function processUserMessage(message) {
 						: '';
 					return `[Student uploaded an image: ${f.name}]${ocrNote}`;
 				}
+				if (f.type === 'application/pdf') {
+					// Full text is injected separately as a system message before each API call.
+					return `[Student uploaded a PDF: ${f.name} — see UPLOADED PROBLEM SET below]`;
+				}
 				return `[Student attached a file: ${f.name} (${f.type})]`;
 			});
 			fileContextSuffix = '\n' + fileParts.join('\n');
@@ -1516,6 +1553,15 @@ async function processUserMessage(message) {
 
 		}
 
+	// Re-inject the uploaded PDF text before every API call so Gemini always
+	// has the full problem set, regardless of how many messages have passed.
+	if (uploadedPdfText) {
+		context.push({
+			role: 'system',
+			content: `UPLOADED PROBLEM SET (${uploadedPdfName || 'student PDF'}):\n${uploadedPdfText}\n\nThe student is working from the problems in this document. Refer to it when answering.`
+		});
+	}
+
 	// ── S-DO choice detection (PRE-CALL) ────────────────────────────────────
 	// Only fires when the tutor's S-DO offer is showing (pending_choice).
 	// "D" → one-shot didactic answer for the original problem, then back to Socratic.
@@ -1536,23 +1582,27 @@ async function processUserMessage(message) {
 				}
 			}
 
-			// Append a didactic instruction to the last user message (not replace it)
-			// so any image / file context already embedded there is preserved.
-			const lastUserIdx = [...context].map((m, i) => ({ m, i }))
-				.filter(({ m }) => m.role === 'user')
-				.at(-1)?.i;
-			if (lastUserIdx !== undefined) {
-				context[lastUserIdx] = {
-					role: 'user',
-					content: context[lastUserIdx].content +
-						'\n\n[The student chose a direct explanation. Give a complete, step-by-step solution to the ORIGINAL problem using the exact numbers and scenario above. Do NOT ask a follow-up question — just give the full answer and stop.]'
-				};
+			// Push a system message anchoring Gemini to the ORIGINAL problem the
+			// student first asked — not the most recent sub-question exchange.
+			// When a PDF was uploaded, that IS the problem set — reference it explicitly.
+			let anchor;
+			if (uploadedPdfText) {
+				anchor = `The student uploaded a PDF problem set ("${uploadedPdfName || 'problem set'}"). The full content is in the UPLOADED PROBLEM SET block above.\nThe original question the student asked from that PDF was: "${originalProblemMessage || 'see the PDF'}"\nSolve THAT specific question from the PDF completely.`;
+			} else if (originalProblemMessage) {
+				anchor = `The original problem the student asked was:\n"${originalProblemMessage}"\nSolve THAT specific problem completely.`;
+			} else {
+				anchor = 'Find the original problem the student first asked at the start of this conversation and solve that — not any sub-question asked along the way.';
 			}
+			context.push({
+				role: 'system',
+				content: `DIDACTIC TRIGGER — student chose a direct explanation.\n${anchor}\nGive the answer first, then a full step-by-step explanation with exact numbers. Do NOT answer the most recent sub-question the tutor asked. Do NOT ask a follow-up question. Stop after the solution.`
+			});
 		} else {
 			// "S" or anything else → stay Socratic, reset so the offer can fire again
 			teachingMode = 'socratic';
 			exchangeRounds = 0;
 			sdoPromptSent = false;
+			originalProblemMessage = null;
 			context[0] = { role: 'system', content: getSystemPrompt() };
 		}
 	}
@@ -1562,11 +1612,12 @@ async function processUserMessage(message) {
 		context.push({
 			role: 'system',
 			content: `REMINDER — SOCRATIC MODE IS ACTIVE. You MUST follow ALL rules without exception:
-• Do NOT give the answer or a full explanation.
+• Do NOT give the answer or a full explanation — even if an image shows a complete problem with all the numbers.
 • End with exactly ONE focused question that guides the student one step further.
 • Build on what the student just said.
 • Keep the tone warm and encouraging.
-• BANNED: full derivations, complete definitions, giving away the answer.`
+• BANNED: full derivations, complete solutions, giving away the answer, worked examples.
+• If the student uploaded an image of a problem, acknowledge it and ask ONE guiding question about it — do NOT solve it.`
 		});
 	}
 
@@ -1585,9 +1636,14 @@ async function processUserMessage(message) {
 		// Get AI response with files (only if files processed successfully)
 		let botResponse = await getGeminiResponse(context, processedFiles.length > 0 ? processedFiles : []);
 
-		// Remove the reinforcement message from context after use (it's ephemeral)
+		// Remove ephemeral injections pushed just before the API call.
+		// Pop in reverse push order: reminder first, then PDF block.
 		if (context[context.length - 1]?.content?.startsWith('REMINDER — SOCRATIC') ||
-		    context[context.length - 1]?.content?.startsWith('REMINDER — DIDACTIC')) {
+		    context[context.length - 1]?.content?.startsWith('REMINDER — DIDACTIC') ||
+		    context[context.length - 1]?.content?.startsWith('DIDACTIC TRIGGER')) {
+			context.pop();
+		}
+		if (context[context.length - 1]?.content?.startsWith('UPLOADED PROBLEM SET')) {
 			context.pop();
 		}
 
@@ -1602,8 +1658,23 @@ async function processUserMessage(message) {
 		// Only count rounds while in Socratic mode (don't count choice/didactic rounds)
 		if (teachingMode === 'socratic') {
 			exchangeRounds++;
-			// On the 5th completed round, append the S-DO choice prompt to the bot response
-			if (exchangeRounds === 5 && !sdoPromptSent) {
+			// Capture the original problem on the very first round so the didactic
+			// answer always addresses it, not a later sub-question.
+			// For PDF uploads, store the student's actual question text (not the file tag).
+			if (exchangeRounds === 1) {
+				if (uploadedPdfText) {
+					// Student's typed text is the question they want solved from the PDF
+					originalProblemMessage = userMessage.trim() || 'the problem in the uploaded PDF';
+				} else {
+					const firstUserEntry = [...context].reverse().find(m => m.role === 'user');
+					originalProblemMessage = firstUserEntry ? firstUserEntry.content : userMessage;
+				}
+			}
+			// On the 5th completed round, append the S-DO choice prompt — but only
+			// if the bot actually asked a guiding question (response ends with '?').
+			// If Gemini gave a full solution anyway, skip the offer to avoid redundancy.
+			const responseIsQuestion = /\?\s*(\*{0,2}|\s*)$/.test(botResponse.trim());
+			if (exchangeRounds === 5 && !sdoPromptSent && responseIsQuestion) {
 				sdoPromptSent = true;
 				teachingMode = 'pending_choice';
 				const sdoMessage = "\n\n**You've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?**";
@@ -1617,6 +1688,7 @@ async function processUserMessage(message) {
 			teachingMode = 'socratic';
 			exchangeRounds = 0;
 			sdoPromptSent = false;
+			originalProblemMessage = null;
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
 			// Strip any S-DO offer or Socratic follow-up Gemini appended.
@@ -1628,10 +1700,26 @@ async function processUserMessage(message) {
 			context[context.length - 1] = { role: 'assistant', content: botResponse };
 		}
 
-		// Manage context size
+		// Manage context size — keep system prompt (index 0) and, if we have
+		// an original problem message pinned, keep that too so the image OCR /
+		// problem statement is never trimmed away mid-conversation.
 		const maxContextMessages = 18;
 		if (context.length > maxContextMessages) {
-			context = [context[0], ...context.slice(-(maxContextMessages - 1))];
+			if (originalProblemMessage) {
+				// Pin the context entry that holds the original problem so it's never sliced off.
+				const matchSnippet = originalProblemMessage.slice(0, 80);
+				const origIdx = context.findIndex(
+					(m, i) => i > 0 && m.role === 'user' && m.content.includes(matchSnippet)
+				);
+				const pinned = origIdx > -1 ? context[origIdx] : null;
+				const rest = context.slice(1).filter((_, i) => (i + 1) !== origIdx);
+				const trimmed = rest.slice(-(maxContextMessages - (pinned ? 2 : 1)));
+				context = pinned
+					? [context[0], pinned, ...trimmed]
+					: [context[0], ...trimmed];
+			} else {
+				context = [context[0], ...context.slice(-(maxContextMessages - 1))];
+			}
 		}
 
 		// Check for whiteboard actions and diagram generation
