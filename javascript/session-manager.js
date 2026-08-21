@@ -948,6 +948,14 @@ class SessionManager {
         }
         break;
 
+      // ── Server signals the class has hit the collective exchange threshold ──
+      // Set a flag so the next bot reply on this client appends the S-DO offer.
+      case 'sdo_ready':
+        if (window._inClassMode) {
+          window._classSDOReady = true;
+        }
+        break;
+
       // ── Mode was changed by the teacher — update every client's teaching mode ──
       case 'mode_changed':
         this.applyClassModeChange(data.newMode, data.changedBy);

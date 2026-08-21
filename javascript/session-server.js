@@ -521,7 +521,10 @@ wss.on("connection", (ws, req) => {
             // ── Collective exchange counter ───────────────────────────────
             // Count every message (student or bot) toward the class threshold.
             // Threshold = 5 student messages + 5 bot replies = 10 total.
-            // Once reached (and no suggestion is already pending), prompt the host.
+            // Once reached:
+            //   • broadcast teaching_mode_suggestion to the host (teacher toast)
+            //   • broadcast sdo_ready to all students so each appends the S-DO offer
+            //     on their next bot reply
             if (!session.classSuggestionPending) {
               session.classExchangeCount++;
               if (session.classExchangeCount >= CLASS_EXCHANGE_THRESHOLD) {
@@ -533,7 +536,11 @@ wss.on("connection", (ws, req) => {
                   suggestedMode: suggestMode,
                   exchangeCount: session.classExchangeCount,
                 });
-                console.log(`[class-mode] suggestion fired for session ${sessionId} after ${session.classExchangeCount} messages`);
+                // Also tell every student client to show the S-DO offer on their next bot reply
+                broadcastToSession(sessionId, {
+                  type: 'sdo_ready',
+                });
+                console.log(`[class-mode] sdo_ready + suggestion fired for session ${sessionId} after ${session.classExchangeCount} messages`);
               }
             }
 

@@ -97,6 +97,7 @@ function resetTopicTracking() {
 	uploadedImageBase64 = null;
 	uploadedImageMime = null;
 	uploadedImageName = null;
+	if (typeof window !== 'undefined') window._classSDOReady = false;
 	context[0] = { role: 'system', content: getSystemPrompt() };
 }
 
@@ -1767,25 +1768,30 @@ async function processUserMessage(message) {
 				const AUTO_IMG_MSG = 'I uploaded an image. Please look at it';
 				const isAutoDefault = userMessage.startsWith(AUTO_PDF_MSG) || userMessage.startsWith(AUTO_IMG_MSG);
 
-				if (isAutoDefault) {
-					// Don't lock in the auto-generated default — wait for the student's
-					// real question on the next turn. Reset round counter so capture fires again.
-					exchangeRounds = 0;
+				if (isAutoDefault && !uploadedPdfText) {
+					// For image uploads with no OCR text, capture the image file context suffix
+					const firstUserEntry = [...context].reverse().find(m => m.role === 'user');
+					originalProblemMessage = firstUserEntry ? firstUserEntry.content : userMessage;
 				} else if (uploadedPdfText) {
-					// PDF active — store the student's actual typed question
 					originalProblemMessage = userMessage.trim();
 				} else {
-					// Text or image — store the full context entry (includes OCR text)
 					const firstUserEntry = [...context].reverse().find(m => m.role === 'user');
 					originalProblemMessage = firstUserEntry ? firstUserEntry.content : userMessage;
 				}
 			}
-			// On the 5th completed round, append the S-DO choice prompt — but only
-			// if the bot actually asked a guiding question (not if it gave a full solution).
-			// Check for a '?' anywhere in the last portion of the response, not just the end.
+			// Fire S-DO offer when:
+			// • In-class mode: server broadcast sdo_ready (global 10-message threshold)
+			// • At-home mode: this student has completed 5 rounds individually
+			const inClass = !!(window._inClassMode && window.sessionManager?.sessionId);
+			const sdoShouldFire = inClass
+				? (window._classSDOReady === true)
+				: (exchangeRounds === 5);
 			const lastChunk = botResponse.trim().slice(-300);
 			const responseIsQuestion = lastChunk.includes('?');
-			if (exchangeRounds === 5 && !sdoPromptSent && responseIsQuestion) {
+			if (sdoShouldFire && !sdoPromptSent && responseIsQuestion) {
+				sdoPromptSent = true;
+				teachingMode = 'pending_choice';
+				if (inClass) window._classSDOReady = false; // consume the flag
 				sdoPromptSent = true;
 				teachingMode = 'pending_choice';
 				const sdoMessage = "\n\n**You've clearly put real effort into reasoning through this. At this point, would you like me to give you the answer directly (reply \"D\"), or would you prefer me to continue working with you through it step by step (reply \"S\")?**";
