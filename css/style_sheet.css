@@ -1800,6 +1800,8 @@ body {
 	.main-content {
 		flex-direction: column;
 		flex: 1;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	.chat-section {
@@ -1807,6 +1809,9 @@ body {
 		max-width: 100%;
 		flex: 1;
 		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		min-height: 0;
 	}
 
 	.whiteboard-section {
@@ -1937,6 +1942,10 @@ body {
 
 	.chat-section {
 		height: 50vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		min-height: 0;
 	}
 
 	.whiteboard-section {
