@@ -1604,6 +1604,18 @@ async function processUserMessage(message) {
 			teachingMode = 'didactic';
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
+			// Replace the "d" user message in context with an unambiguous instruction.
+			// Without this Gemini treats "d" as a student answer to the last Socratic question.
+			const lastUserIdx = [...context].map((m, i) => ({ m, i }))
+				.filter(({ m }) => m.role === 'user')
+				.at(-1)?.i;
+			if (lastUserIdx !== undefined) {
+				context[lastUserIdx] = {
+					role: 'user',
+					content: '[Student selected: Give me the direct answer (Didactic mode)]'
+				};
+			}
+
 			// Strip the S-DO offer text from the last assistant message so Gemini
 			// doesn't treat it as a pattern to repeat.
 			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
