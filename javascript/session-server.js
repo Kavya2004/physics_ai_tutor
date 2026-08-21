@@ -20,6 +20,7 @@ import pineconeHandler from '../api/pinecone.js';
 import pdfContentHandler from '../api/pdf-content.js';
 import pdfPageHandler from '../api/pdf-page.js';
 import imageGenHandler from '../api/image-gen.js';
+import extractPdfHandler from '../api/extract-pdf.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -56,6 +57,7 @@ app.post('/api/pinecone', (req, res) => pineconeHandler(req, res));
 app.post('/api/pdf-content', (req, res) => pdfContentHandler(req, res));
 app.post('/api/pdf-page', (req, res) => pdfPageHandler(req, res));
 app.post('/api/image-gen', (req, res) => imageGenHandler(req, res));
+app.post('/api/extract-pdf', (req, res) => extractPdfHandler(req, res));
 // Handle OPTIONS preflight for all /api routes
 app.options('/api/:path', cors());
 
@@ -143,9 +145,9 @@ class TutorSession {
     this.lastActivity = new Date();
 
     // ── Collective teaching-mode suggestion counter ───────────────────────
-    // Counts total bot replies across ALL students in this session.
-    // Every CLASS_EXCHANGE_THRESHOLD bot replies the host is prompted to
-    // consider switching Socratic ↔ Didactic.
+    // Counts every message (student or bot) across ALL students in this session.
+    // Threshold = CLASS_EXCHANGE_THRESHOLD total messages (default 10 = ~5 exchanges).
+    // When reached, the host is prompted to consider switching Socratic ↔ Didactic.
     this.classExchangeCount = 0;
     this.classSuggestionPending = false;  // true while suggestion is showing
     this.currentTeachingMode = 'socratic'; // tracks what the class is currently doing

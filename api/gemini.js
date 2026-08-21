@@ -89,10 +89,16 @@ export default async function handler(req, res) {
           }
       }
 
-      const systemMessage = messages.find(msg => msg.role === 'system');
-      if (systemMessage && geminiMessages.length > 0) {
-          if (geminiMessages[0].role === 'user') {
-              geminiMessages[0].parts[0].text = `${systemMessage.content}\n\nUser: ${geminiMessages[0].parts[0].text}`;
+      // Collect ALL system messages and prepend them together to the first user
+      // message. Gemini doesn't have a native system role so this is the standard
+      // approach — previously only the first system message was used, silently
+      // dropping course materials, PDF content, Socratic reminders, etc.
+      const systemMessages = messages.filter(msg => msg.role === 'system');
+      if (systemMessages.length > 0 && geminiMessages.length > 0) {
+          const firstUserIdx = geminiMessages.findIndex(m => m.role === 'user');
+          if (firstUserIdx !== -1) {
+              const combinedSystem = systemMessages.map(m => m.content).join('\n\n---\n\n');
+              geminiMessages[firstUserIdx].parts[0].text = `${combinedSystem}\n\n---\n\nUser: ${geminiMessages[firstUserIdx].parts[0].text}`;
           }
       }
 

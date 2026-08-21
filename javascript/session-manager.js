@@ -1045,19 +1045,29 @@ class SessionManager {
 
   // Apply a class-wide mode change on every client
   applyClassModeChange(newMode, changedBy) {
-    // Update the tutor-chat.js teaching mode so the AI uses the right system prompt
+    // Retry if chat hasn't initialized yet (WS event may arrive before DOM ready)
+    if (!window.chatInitialized) {
+      setTimeout(() => this.applyClassModeChange(newMode, changedBy), 500);
+      return;
+    }
+
     if (newMode === 'didactic' && window.teachingMode !== undefined) {
-      window.teachingMode = 'didactic';
-      if (typeof window.getSystemPrompt === 'function' && window.context) {
+      // Reset all Socratic counters first, then override mode to didactic
+      if (typeof window.resetTopicTracking === 'function') {
+        window.resetTopicTracking(); // sets teachingMode='socratic', resets all counters
+      }
+      window.teachingMode = 'didactic'; // override to didactic after reset
+      if (window.context && typeof window.getSystemPrompt === 'function') {
         window.context[0] = { role: 'system', content: window.getSystemPrompt() };
       }
     } else if (newMode === 'socratic' && window.teachingMode !== undefined) {
-      // Full reset: exchange counter back to 0, back to Socratic
       if (typeof window.resetTopicTracking === 'function') {
-        window.resetTopicTracking();
+        window.resetTopicTracking(); // fully resets to socratic with counters at 0
       } else {
         window.teachingMode = 'socratic';
-        if (window.context) window.context[0] = { role: 'system', content: window.getSystemPrompt() };
+        if (window.context && typeof window.getSystemPrompt === 'function') {
+          window.context[0] = { role: 'system', content: window.getSystemPrompt() };
+        }
       }
     }
 

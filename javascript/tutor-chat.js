@@ -483,23 +483,26 @@ async function processFilesForTutor(files) {
 		}
 
 		if (file.type === 'application/pdf') {
-			try {
-				const resp = await fetch('/api/extract-pdf', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ data: base64 }),
-				});
-				if (resp.ok) {
-					const { text } = await resp.json();
-					if (text && text.trim()) {
-						fileEntry.pdfText = text.trim();
-						// Store globally so it can be re-injected on every API call
-						uploadedPdfText = text.trim();
-						uploadedPdfName = file.name;
+			// Only use the first PDF uploaded — subsequent PDFs in the same message
+			// are ignored to avoid silently overwriting the problem-set context.
+			if (!uploadedPdfText) {
+				try {
+					const resp = await fetch('/api/extract-pdf', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ data: base64 }),
+					});
+					if (resp.ok) {
+						const { text } = await resp.json();
+						if (text && text.trim()) {
+							fileEntry.pdfText = text.trim();
+							uploadedPdfText = text.trim();
+							uploadedPdfName = file.name;
+						}
 					}
+				} catch (pdfErr) {
+					fileEntry.pdfText = null;
 				}
-			} catch (pdfErr) {
-				fileEntry.pdfText = null;
 			}
 		}
 
@@ -1598,7 +1601,16 @@ async function processUserMessage(message) {
 				content: `DIDACTIC TRIGGER — student chose a direct explanation.\n${anchor}\nGive the answer first, then a full step-by-step explanation with exact numbers. Do NOT answer the most recent sub-question the tutor asked. Do NOT ask a follow-up question. Stop after the solution.`
 			});
 		} else {
-			// "S" or anything else → stay Socratic, reset so the offer can fire again
+			// "S" or anything else → stay Socratic, reset so the offer can fire again.
+			// Also strip the S-DO offer text from the last assistant message so Gemini
+			// doesn't keep seeing it as a pattern to repeat.
+			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			for (let i = context.length - 1; i >= 0; i--) {
+				if (context[i].role === 'assistant') {
+					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
+					break;
+				}
+			}
 			teachingMode = 'socratic';
 			exchangeRounds = 0;
 			sdoPromptSent = false;
@@ -1637,13 +1649,19 @@ async function processUserMessage(message) {
 		let botResponse = await getGeminiResponse(context, processedFiles.length > 0 ? processedFiles : []);
 
 		// Remove ephemeral injections pushed just before the API call.
-		// Pop in reverse push order: reminder first, then PDF block.
-		if (context[context.length - 1]?.content?.startsWith('REMINDER — SOCRATIC') ||
-		    context[context.length - 1]?.content?.startsWith('REMINDER — DIDACTIC') ||
-		    context[context.length - 1]?.content?.startsWith('DIDACTIC TRIGGER')) {
-			context.pop();
-		}
-		if (context[context.length - 1]?.content?.startsWith('UPLOADED PROBLEM SET')) {
+		// Pop in reverse push order. The stack top→bottom is:
+		//   REMINDER (Socratic or Didactic)
+		//   DIDACTIC TRIGGER (only when student chose D)
+		//   UPLOADED PROBLEM SET (if PDF was uploaded)
+		//   COURSE MATERIALS (if search returned results)
+		const ephemeralPrefixes = [
+			'REMINDER — SOCRATIC',
+			'REMINDER — DIDACTIC',
+			'DIDACTIC TRIGGER',
+			'UPLOADED PROBLEM SET',
+			'COURSE MATERIALS',
+		];
+		while (ephemeralPrefixes.some(p => context[context.length - 1]?.content?.startsWith(p))) {
 			context.pop();
 		}
 
