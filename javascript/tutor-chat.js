@@ -1598,9 +1598,11 @@ async function processUserMessage(message) {
 	// Only fires when the tutor's S-DO offer is showing (pending_choice).
 	// "D" → one-shot didactic answer for the original problem, then back to Socratic.
 	// "S" or anything else → stay Socratic, reset counter.
+	// IMPORTANT: use the raw `message` parameter (not `userMessage`) because
+	// userMessage may have been mutated with whiteboard/file suffixes by this point.
+	const rawReply = message.trim().toUpperCase();
 	if (teachingMode === 'pending_choice') {
-		const reply = userMessage.trim().toUpperCase();
-		if (reply === 'D') {
+		if (rawReply === 'D' || /^give\s+didactic$/i.test(message.trim())) {
 			teachingMode = 'didactic';
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
