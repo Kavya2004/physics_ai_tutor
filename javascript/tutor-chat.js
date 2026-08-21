@@ -16,6 +16,7 @@ let originalProblemMessage = null;
 // as context on every API call without bloating the rolling message window.
 let uploadedPdfText = null;
 let uploadedPdfName = null;
+let uploadedPdfBase64 = null; // re-sent as inlineData on every call so Gemini can read it precisely
 
 const SOCRATIC_SYSTEM = `You are an AI physics tutor using the Socratic method. Your role is to guide the student to discover answers themselves through carefully sequenced questions — never by giving the answer directly.
 
@@ -87,6 +88,7 @@ function resetTopicTracking() {
 	originalProblemMessage = null;
 	uploadedPdfText = null;
 	uploadedPdfName = null;
+	uploadedPdfBase64 = null;
 	context[0] = { role: 'system', content: getSystemPrompt() };
 }
 
@@ -489,6 +491,10 @@ async function processFilesForTutor(files) {
 			// Only use the first PDF uploaded — subsequent PDFs in the same message
 			// are ignored to avoid silently overwriting the problem-set context.
 			if (!uploadedPdfText) {
+				// Store base64 so we can re-send the PDF inline on every follow-up call
+				uploadedPdfBase64 = base64;
+				uploadedPdfName = file.name;
+				uploadedPdfText = file.name; // non-null sentinel so re-injection fires
 				try {
 					const resp = await fetch('/api/extract-pdf', {
 						method: 'POST',
@@ -499,8 +505,7 @@ async function processFilesForTutor(files) {
 						const { text } = await resp.json();
 						if (text && text.trim()) {
 							fileEntry.pdfText = text.trim();
-							uploadedPdfText = text.trim();
-							uploadedPdfName = file.name;
+							uploadedPdfText = text.trim(); // real text if available
 						}
 					}
 				} catch (pdfErr) {
@@ -1659,7 +1664,17 @@ async function processUserMessage(message) {
 	}
 
 		// Get AI response with files (only if files processed successfully)
-		let botResponse = await getGeminiResponse(context, processedFiles.length > 0 ? processedFiles : []);
+		// If the student uploaded a PDF earlier but didn't re-attach it this turn,
+		// re-inject it as inlineData so Gemini can read exact question text precisely.
+		const hasPdfThisTurn = processedFiles.some(f => f.type === 'application/pdf');
+		let filesForGemini = processedFiles.length > 0 ? processedFiles : [];
+		if (uploadedPdfBase64 && !hasPdfThisTurn) {
+			filesForGemini = [
+				{ name: uploadedPdfName, type: 'application/pdf', data: uploadedPdfBase64 },
+				...filesForGemini,
+			];
+		}
+		let botResponse = await getGeminiResponse(context, filesForGemini);
 
 		// Remove ephemeral injections pushed just before the API call.
 		// Pop in reverse push order. The stack top→bottom is:
