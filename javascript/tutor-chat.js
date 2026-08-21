@@ -1379,8 +1379,14 @@ async function processUserMessage(message) {
 			// No text provided — give Gemini something to work with in adversarial mode
 			userMessage = 'I uploaded an image. Please look at it carefully and engage with it as my physics tutor.';
 		} else if (!userMessage) {
-			const fileNames = processedFiles.map((f) => f.name).join(', ');
-			userMessage = `I've uploaded these files: ${fileNames}`;
+			const hasPdf = processedFiles.some(f => f.type === 'application/pdf');
+			if (hasPdf && uploadedPdfText) {
+				// PDF was extracted — tell Gemini to scan it and ask which problem to start on
+				userMessage = 'I uploaded a problem set. Please read through it and ask me which problem I want to work on, listing the question numbers or topics you can see.';
+			} else {
+				const fileNames = processedFiles.map((f) => f.name).join(', ');
+				userMessage = `I've uploaded these files: ${fileNames}`;
+			}
 		}
 		// Files (with base64 data) are sent directly to Gemini API
 	}
@@ -1621,6 +1627,9 @@ async function processUserMessage(message) {
 
 	// Reinforce the Socratic rules right before every call (only in Socratic mode)
 	if (teachingMode === 'socratic') {
+		const pdfNote = uploadedPdfText
+			? '\n• A problem set PDF has been uploaded — its full content is in the UPLOADED PROBLEM SET block. When the student says "question 1" or similar, look up that question in the PDF and start guiding them on it. Do NOT ask them to re-type the question.'
+			: '';
 		context.push({
 			role: 'system',
 			content: `REMINDER — SOCRATIC MODE IS ACTIVE. You MUST follow ALL rules without exception:
@@ -1629,7 +1638,7 @@ async function processUserMessage(message) {
 • Build on what the student just said.
 • Keep the tone warm and encouraging.
 • BANNED: full derivations, complete solutions, giving away the answer, worked examples.
-• If the student uploaded an image of a problem, acknowledge it and ask ONE guiding question about it — do NOT solve it.`
+• If the student uploaded an image of a problem, acknowledge it and ask ONE guiding question about it — do NOT solve it.${pdfNote}`
 		});
 	}
 
