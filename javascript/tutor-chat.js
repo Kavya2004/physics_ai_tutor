@@ -505,10 +505,11 @@ async function processFilesForTutor(files) {
 			// Only use the first PDF uploaded — subsequent PDFs in the same message
 			// are ignored to avoid silently overwriting the problem-set context.
 			if (!uploadedPdfText) {
-				// Store base64 so we can re-send the PDF inline on every follow-up call
 				uploadedPdfBase64 = base64;
 				uploadedPdfName = file.name;
-				uploadedPdfText = file.name; // non-null sentinel so re-injection fires
+				uploadedPdfText = file.name; // non-null sentinel
+
+				// Try pdf-parse first (fast, works for text-layer PDFs)
 				try {
 					const resp = await fetch('/api/extract-pdf', {
 						method: 'POST',
@@ -517,13 +518,41 @@ async function processFilesForTutor(files) {
 					});
 					if (resp.ok) {
 						const { text } = await resp.json();
-						if (text && text.trim()) {
+						if (text && text.trim().length > 200) {
 							fileEntry.pdfText = text.trim();
-							uploadedPdfText = text.trim(); // real text if available
+							uploadedPdfText = text.trim();
 						}
 					}
-				} catch (pdfErr) {
-					fileEntry.pdfText = null;
+				} catch (_) {}
+
+				// For scanned PDFs where pdf-parse gives almost nothing,
+				// make a one-shot Gemini call to extract all question text.
+				// This result is stored and re-injected as a system message on every
+				// follow-up turn — same pattern as in-class mode.
+				if (uploadedPdfText === file.name || uploadedPdfText.length < 200) {
+					try {
+						const extractResp = await fetch('/api/gemini', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								messages: [
+									{
+										role: 'system',
+										content: 'You are a text extractor. Extract ALL question text from the attached PDF exactly as written. List every question with its number/label. Do not explain, solve, or summarize — output only the raw question text.'
+									},
+									{ role: 'user', content: 'Extract all questions from this PDF.' }
+								],
+								files: [{ name: file.name, type: 'application/pdf', data: base64 }]
+							})
+						});
+						if (extractResp.ok) {
+							const { response } = await extractResp.json();
+							if (response && response.trim().length > 100) {
+								uploadedPdfText = response.trim();
+								fileEntry.pdfText = uploadedPdfText;
+							}
+						}
+					} catch (_) {}
 				}
 			}
 		}
@@ -1694,17 +1723,10 @@ async function processUserMessage(message) {
 	}
 
 		// Get AI response with files (only if files processed successfully)
-		// Re-inject any previously uploaded PDF or image inline so Gemini can read
-		// exact content on every follow-up turn, not just the first one.
-		const hasPdfThisTurn   = processedFiles.some(f => f.type === 'application/pdf');
-		const hasImageThisTurn = processedFiles.some(f => f.type && f.type.startsWith('image/'));
+		// Send the PDF/image inline ONLY on the first turn (when processedFiles has them).
+		// On follow-up turns, rely on the UPLOADED PROBLEM SET system message instead.
+		// This avoids PayloadTooLargeError from re-sending large files every turn.
 		let filesForGemini = processedFiles.length > 0 ? [...processedFiles] : [];
-		if (uploadedPdfBase64 && !hasPdfThisTurn) {
-			filesForGemini.unshift({ name: uploadedPdfName, type: 'application/pdf', data: uploadedPdfBase64 });
-		}
-		if (uploadedImageBase64 && !hasImageThisTurn) {
-			filesForGemini.unshift({ name: uploadedImageName, type: uploadedImageMime, data: uploadedImageBase64 });
-		}
 		let botResponse = await getGeminiResponse(context, filesForGemini);
 
 		// Remove ephemeral injections pushed just before the API call.

@@ -39,7 +39,9 @@ app.use(cors({
 
 // Handle preflight for all routes
 app.options('/{*path}', cors());
-app.use(express.json());
+// Increase JSON body limit to handle PDF/image base64 payloads (default 100kb is too small)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // User activity (login / logout tracking)
 app.use('/api/user-activity', userActivityRouter);
