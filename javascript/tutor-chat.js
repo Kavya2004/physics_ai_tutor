@@ -18,6 +18,11 @@ let uploadedPdfText = null;
 let uploadedPdfName = null;
 let uploadedPdfBase64 = null; // re-sent as inlineData on every call so Gemini can read it precisely
 
+// Stores the first uploaded image so it can be re-sent inline on follow-up turns.
+let uploadedImageBase64 = null;
+let uploadedImageMime = null;
+let uploadedImageName = null;
+
 const SOCRATIC_SYSTEM = `You are an AI physics tutor using the Socratic method. Your role is to guide the student to discover answers themselves through carefully sequenced questions — never by giving the answer directly.
 
 ━━━ SOCRATIC MODE — MANDATORY RULES ━━━
@@ -89,6 +94,9 @@ function resetTopicTracking() {
 	uploadedPdfText = null;
 	uploadedPdfName = null;
 	uploadedPdfBase64 = null;
+	uploadedImageBase64 = null;
+	uploadedImageMime = null;
+	uploadedImageName = null;
 	context[0] = { role: 'system', content: getSystemPrompt() };
 }
 
@@ -484,6 +492,12 @@ async function processFilesForTutor(files) {
 				}
 			} catch (ocrError) {
 				fileEntry.ocrText = null;
+			}
+			// Store first image so it can be re-sent inline on every follow-up call
+			if (!uploadedImageBase64) {
+				uploadedImageBase64 = base64;
+				uploadedImageMime = file.type;
+				uploadedImageName = file.name;
 			}
 		}
 
@@ -1604,8 +1618,10 @@ async function processUserMessage(message) {
 			// student first asked — not the most recent sub-question exchange.
 			// When a PDF was uploaded, that IS the problem set — reference it explicitly.
 			let anchor;
-			if (uploadedPdfText) {
-				anchor = `The student uploaded a PDF problem set ("${uploadedPdfName || 'problem set'}"). The full content is in the UPLOADED PROBLEM SET block above.\nThe original question the student asked from that PDF was: "${originalProblemMessage || 'see the PDF'}"\nSolve THAT specific question from the PDF completely.`;
+			if (uploadedPdfBase64) {
+				anchor = `The student uploaded a PDF problem set ("${uploadedPdfName || 'problem set'}"). The PDF is attached inline — read it directly.\nThe original question the student asked from that PDF was: "${originalProblemMessage || 'see the PDF'}"\nSolve THAT specific question from the PDF completely.`;
+			} else if (uploadedImageBase64) {
+				anchor = `The student uploaded an image of their problem ("${uploadedImageName || 'image'}"). The image is attached inline — read it directly.\nThe original problem the student asked about was: "${originalProblemMessage || 'see the image'}"\nSolve THAT specific problem from the image completely.`;
 			} else if (originalProblemMessage) {
 				anchor = `The original problem the student asked was:\n"${originalProblemMessage}"\nSolve THAT specific problem completely.`;
 			} else {
@@ -1664,15 +1680,16 @@ async function processUserMessage(message) {
 	}
 
 		// Get AI response with files (only if files processed successfully)
-		// If the student uploaded a PDF earlier but didn't re-attach it this turn,
-		// re-inject it as inlineData so Gemini can read exact question text precisely.
-		const hasPdfThisTurn = processedFiles.some(f => f.type === 'application/pdf');
-		let filesForGemini = processedFiles.length > 0 ? processedFiles : [];
+		// Re-inject any previously uploaded PDF or image inline so Gemini can read
+		// exact content on every follow-up turn, not just the first one.
+		const hasPdfThisTurn   = processedFiles.some(f => f.type === 'application/pdf');
+		const hasImageThisTurn = processedFiles.some(f => f.type && f.type.startsWith('image/'));
+		let filesForGemini = processedFiles.length > 0 ? [...processedFiles] : [];
 		if (uploadedPdfBase64 && !hasPdfThisTurn) {
-			filesForGemini = [
-				{ name: uploadedPdfName, type: 'application/pdf', data: uploadedPdfBase64 },
-				...filesForGemini,
-			];
+			filesForGemini.unshift({ name: uploadedPdfName, type: 'application/pdf', data: uploadedPdfBase64 });
+		}
+		if (uploadedImageBase64 && !hasImageThisTurn) {
+			filesForGemini.unshift({ name: uploadedImageName, type: uploadedImageMime, data: uploadedImageBase64 });
 		}
 		let botResponse = await getGeminiResponse(context, filesForGemini);
 
@@ -1704,14 +1721,25 @@ async function processUserMessage(message) {
 		// Only count rounds while in Socratic mode (don't count choice/didactic rounds)
 		if (teachingMode === 'socratic') {
 			exchangeRounds++;
-			// Capture the original problem on the very first round so the didactic
-			// answer always addresses it, not a later sub-question.
-			// For PDF uploads, store the student's actual question text (not the file tag).
+			// Capture the original problem on the very first round.
+			// Rules per input type:
+			//   PDF  → delay until student types a real question (not the auto-upload default)
+			//   image → store the full context entry (includes OCR text if available)
+			//   text  → store the context entry directly
 			if (exchangeRounds === 1) {
-				if (uploadedPdfText) {
-					// Student's typed text is the question they want solved from the PDF
-					originalProblemMessage = userMessage.trim() || 'the problem in the uploaded PDF';
+				const AUTO_PDF_MSG = 'I uploaded a problem set. Please read through it';
+				const AUTO_IMG_MSG = 'I uploaded an image. Please look at it';
+				const isAutoDefault = userMessage.startsWith(AUTO_PDF_MSG) || userMessage.startsWith(AUTO_IMG_MSG);
+
+				if (isAutoDefault) {
+					// Don't lock in the auto-generated default — wait for the student's
+					// real question on the next turn. Reset round counter so capture fires again.
+					exchangeRounds = 0;
+				} else if (uploadedPdfText) {
+					// PDF active — store the student's actual typed question
+					originalProblemMessage = userMessage.trim();
 				} else {
+					// Text or image — store the full context entry (includes OCR text)
 					const firstUserEntry = [...context].reverse().find(m => m.role === 'user');
 					originalProblemMessage = firstUserEntry ? firstUserEntry.content : userMessage;
 				}
