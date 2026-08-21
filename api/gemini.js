@@ -1,22 +1,3 @@
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-
-function decodeBase64Data(dataUrl) {
-  const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-  return Buffer.from(base64, 'base64');
-}
-
-async function extractPdfText(dataUrl) {
-  try {
-    const buffer = decodeBase64Data(dataUrl);
-    const pdfData = await pdfParse(buffer);
-    const cleaned = (pdfData.text || '').replace(/\s+/g, ' ').trim();
-    return cleaned.slice(0, 14000) + (cleaned.length > 14000 ? '...' : '');
-  } catch (err) {
-    console.error('PDF extraction failed:', err);
-    return null;
-  }
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -76,9 +57,16 @@ export default async function handler(req, res) {
                           lastUserMsg.parts.push({ text: `OCR text from image ${file.name}: ${ocrText}` });
                       }
                   } else if (file.type === 'application/pdf') {
-                      const pdfText = await extractPdfText(file.data);
-                      if (pdfText) {
-                          lastUserMsg.parts.push({ text: `Extracted text from PDF ${file.name}: ${pdfText}` });
+                      // Pass PDF inline — Gemini natively reads PDFs visually,
+                      // which handles scanned/image-based PDFs that pdf-parse can't extract.
+                      const base64Data = file.data.includes(',') ? file.data.split(',')[1] : file.data;
+                      if (base64Data && base64Data.length > 0) {
+                          lastUserMsg.parts.push({
+                              inlineData: {
+                                  mimeType: 'application/pdf',
+                                  data: base64Data
+                              }
+                          });
                       }
                   }
               }

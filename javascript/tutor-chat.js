@@ -468,6 +468,9 @@ async function processFilesForTutor(files) {
 		const fileEntry = {
 			name: file.name,
 			type: file.type,
+			// Keep a blob URL for PDFs so the preview iframe doesn't hit the
+			// data: URL security block in modern browsers.
+			_blobUrl: file.type === 'application/pdf' ? URL.createObjectURL(file) : null,
 			data: base64
 		};
 
@@ -942,7 +945,8 @@ function viewUploadedFile(file) {
 			content.appendChild(img);
 		} else if (file.type === 'application/pdf') {
 			const iframe = document.createElement('iframe');
-			iframe.src = file.data;
+			// Prefer blob URL (avoids data: URL security block in Chrome/Safari)
+			iframe.src = file._blobUrl || file.data;
 			iframe.style.cssText = 'width: 80vw; height: 80vh; border: none;';
 			content.appendChild(iframe);
 		}
