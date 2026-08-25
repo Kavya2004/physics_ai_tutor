@@ -1530,6 +1530,57 @@ function setupImageInteraction(boardType) {
 
 window.generateAndPlaceImage = generateAndPlaceImage;
 
+// Save the whiteboard as a PNG download
+function saveWhiteboardAsImage(boardType = 'student') {
+	const srcCanvas = document.getElementById(
+		boardType === 'teacher' ? 'teacherWhiteboard' : 'studentWhiteboard'
+	);
+	if (!srcCanvas) return;
+
+	// Composite: white background + strokes + stickers
+	const out = document.createElement('canvas');
+	out.width  = srcCanvas.width;
+	out.height = srcCanvas.height;
+	const ctx = out.getContext('2d');
+
+	// White background
+	ctx.fillStyle = '#ffffff';
+	ctx.fillRect(0, 0, out.width, out.height);
+
+	// Whiteboard strokes
+	ctx.drawImage(srcCanvas, 0, 0);
+
+	// Sticker overlay (absolute-positioned imgs sitting on top of the canvas)
+	const overlay = document.getElementById('stickerOverlay');
+	if (overlay) {
+		const canvasRect = srcCanvas.getBoundingClientRect();
+		const scaleX = srcCanvas.width  / canvasRect.width;
+		const scaleY = srcCanvas.height / canvasRect.height;
+		const imgs = overlay.querySelectorAll('img');
+		imgs.forEach(img => {
+			const r = img.getBoundingClientRect();
+			const x = (r.left - canvasRect.left) * scaleX;
+			const y = (r.top  - canvasRect.top)  * scaleY;
+			const w = r.width  * scaleX;
+			const h = r.height * scaleY;
+			try { ctx.drawImage(img, x, y, w, h); } catch (_) {}
+		});
+	}
+
+	// Trigger download
+	out.toBlob(blob => {
+		const url = URL.createObjectURL(blob);
+		const a   = document.createElement('a');
+		const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+		a.href     = url;
+		a.download = `whiteboard-${ts}.png`;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 5000);
+	}, 'image/png');
+}
+
+window.saveWhiteboardAsImage = saveWhiteboardAsImage;
+
 // Export functions for external use
 window.tutorWhiteboard = {
 	clearWhiteboard,
@@ -1548,7 +1599,8 @@ window.tutorWhiteboard = {
 	insertEquals,
 	insertFraction,
 	insertSquareRoot,
-	insertPi
+	insertPi,
+	saveWhiteboardAsImage
 };
 
 // Quick graph generation function
