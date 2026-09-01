@@ -65,7 +65,7 @@ RULE 3 — REFERENCE PRIOR EXCHANGES:
 Acknowledge what the student already figured out during the Socratic phase, then fill in the gaps.
 
 RULE 4 — STOP AFTER THE ANSWER:
-Do NOT end with a follow-up question. Do NOT ask the student to reflect or reason further. Do NOT append any "reply D / reply S" prompt. Give the complete answer and stop.
+Do NOT end with a follow-up question. Do NOT ask the student to reflect or reason further. Do NOT append any "reply D / reply S" prompt. Do NOT write phrases like "Does this help?", "Do you understand?", "Would you like to explore more?", "Let me know if...", or any sentence ending in "?". Give the complete answer and stop. Your final sentence must be a statement, not a question.
 
 RULE 5 — USE COURSE MATERIALS:
 Ground your explanation in the provided COURSE MATERIALS context wherever possible.
@@ -784,21 +784,25 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 	avatar.className = 'message-avatar';
 	avatar.innerHTML = sender === 'bot' ? '🤖' : '👤';
 
-	// Convert LaTeX to Unicode for bot messages
-	// Protect $...$ and $$...$$ blocks from unicode conversion so KaTeX can render them
+	// ── Rendering pipeline (StackEdit-style: math protection → marked → KaTeX) ──
+	//
+	// Step 1: Extract inline image markers so they don't interfere with rendering.
+	// Step 2: Pull math blocks out into placeholders BEFORE marked.js runs.
+	//         marked would mangle $...$ (treat _ as italic, escape backslashes, etc.)
+	// Step 3: Run marked.parse() for proper markdown → HTML (bold, italic, lists,
+	//         headers, code blocks, tables — all handled by a real parser).
+	// Step 4: Restore math placeholders back into the HTML string.
+	// Step 5: Set innerHTML. KaTeX's renderMathInElement then scans the DOM and
+	//         renders every math delimiter it finds.
+
 	let displayText = text;
-	if (sender === 'bot' && window.convertLatexToUnicode) {
-		// Temporarily pull out math blocks before unicode conversion
-		const mathBlocks = [];
-		let protected_text = displayText
-			.replace(/\$\$[\s\S]+?\$\$/g, (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
-			.replace(/\$[^$]+?\$/g,        (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
-			.replace(/\\\([\s\S]+?\\\)/g,  (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
-			.replace(/\\\[[\s\S]+?\\\]/g,  (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; });
-		protected_text = window.convertLatexToUnicode(protected_text);
-		// Restore math blocks
-		displayText = protected_text.replace(/\x00MATH(\d+)\x00/g, (_, i) => mathBlocks[i]);
-	}
+
+	// Step 1 — extract [IMAGE:data:...] markers
+	const inlineImages = [];
+	displayText = displayText.replace(/\[IMAGE:(data:[^\]]+)\]/g, (_, dataUrl) => {
+		inlineImages.push(dataUrl);
+		return '';
+	});
 
 	const content = document.createElement('div');
 	content.className = 'message-content';
@@ -810,25 +814,20 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 			const icon = getSourceIcon(c.name);
 			const safeName = (c.name || '').replace(/'/g, "\\'");
 
-			// Skip video/lecture link sources
 			if (/video links|lecture video/i.test(c.name || '')) return '';
 
-			// Textbook — show local page image
 			const isTextbook = /college physics|textbook|physics.?2e/i.test(c.name || '');
 			if (isTextbook && c.page) {
 				return `<span class="citation-pill" onclick="showBookRef(${c.page})" style="cursor:pointer" title="View page ${c.page}">${icon} ${c.name}${pageLabel}</span>`;
 			}
 
-			// Everything else (slides, notes, YouTube) — open from Google Drive
 			if (c.drive_file_id) {
 				const driveUrl = `https://drive.google.com/file/d/${c.drive_file_id}/preview${c.page ? `#page=${c.page}` : ''}`;
 				return `<span class="citation-pill" onclick="showDriveRef('${driveUrl}','${safeName}',${c.page||'null'})" style="cursor:pointer" title="View source">${icon} ${c.name}${pageLabel}</span>`;
 			}
 
-			// Video with URL but no drive ID — skip
 			if (c.url) return '';
 
-			// Fallback — show text content
 			if (c.text) {
 				const safeText = c.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
 				return `<span class="citation-pill" onclick="showTextRef('${safeText}','${safeName}',${c.page||1})" style="cursor:pointer" title="View source">${icon} ${c.name}${pageLabel}</span>`;
@@ -839,48 +838,53 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 		}).join('');
 	}
 
-	// Extract inline image markers ([IMAGE:data:...]) before HTML rendering
-	const inlineImages = [];
-	let textWithoutImages = displayText.replace(/\[IMAGE:(data:[^\]]+)\]/g, (_, dataUrl) => {
-		inlineImages.push(dataUrl);
-		return '';
-	});
+	if (sender === 'bot') {
+		// Step 2 — protect math blocks from the markdown parser
+		const mathBlocks = [];
+		const protect = (str) => str
+			// $$...$$ must be checked before $...$ (longer delimiter wins)
+			.replace(/\$\$[\s\S]+?\$\$/g,  (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+			.replace(/\$[^$\n]+?\$/g,       (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+			.replace(/\\\([\s\S]+?\\\)/g,   (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+			.replace(/\\\[[\s\S]+?\\\]/g,   (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; });
 
-	// Protect math blocks from the \n → <br> replacement.
-	// KaTeX needs the raw delimiter text intact — inserting <br> tags inside
-	// $$...$$ or $...$ blocks prevents renderMathInElement from finding them.
-	const htmlMathBlocks = [];
-	let htmlSafeText = textWithoutImages
-		// Must protect $$...$$ first (longer delimiter wins)
-		.replace(/\$\$[\s\S]+?\$\$/g, (m) => {
-			htmlMathBlocks.push(m);
-			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
-		})
-		.replace(/\$[^$]+?\$/g, (m) => {
-			htmlMathBlocks.push(m);
-			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
-		})
-		.replace(/\\\([\s\S]+?\\\)/g, (m) => {
-			htmlMathBlocks.push(m);
-			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
-		})
-		.replace(/\\\[[\s\S]+?\\\]/g, (m) => {
-			htmlMathBlocks.push(m);
-			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
-		});
+		const restore = (str) => str.replace(/ÿMATHÿ(\d+)ÿ/g, (_, i) => mathBlocks[i]);
 
-	// Apply line-break and URL replacements only on non-math text
-	htmlSafeText = htmlSafeText
-		.replace(/\n/g, '<br>')
-		.replace(/<https?:\/\/[^>]+>/g, (match) => {
-			const url = match.slice(1, -1);
-			return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-		});
+		const protected_md = protect(displayText);
 
-	// Restore math blocks (delimiters now intact for KaTeX)
-	htmlSafeText = htmlSafeText.replace(/\x00HTMLMATH(\d+)\x00/g, (_, i) => htmlMathBlocks[i]);
+		// Step 3 — parse markdown with marked.js
+		// Configure marked: use GFM (GitHub Flavoured Markdown) for tables/strikethrough,
+		// but disable the default <br> on single newlines (we let the HTML flow naturally).
+		let markedHtml;
+		if (window.marked) {
+			window.marked.setOptions({
+				gfm: true,
+				breaks: false,   // don't auto-br on every newline — marked handles paragraphs
+				pedantic: false,
+			});
+			// marked wraps top-level content in <p> tags which is fine for chat.
+			// Use marked.parse() for block-level (paragraphs, headers, lists, tables).
+			markedHtml = window.marked.parse(protected_md);
+		} else {
+			// Fallback if marked somehow isn't loaded: plain newline→<br>
+			markedHtml = protected_md.replace(/\n/g, '<br>');
+		}
 
-	content.innerHTML = htmlSafeText;
+		// Step 4 — restore math blocks into the rendered HTML
+		markedHtml = restore(markedHtml);
+
+		// Angle-bracket URLs: <https://...> → clickable link
+		markedHtml = markedHtml.replace(/<(https?:\/\/[^>]+)>/g, (_, url) =>
+			`<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+		);
+
+		content.innerHTML = markedHtml;
+	} else {
+		// User messages: plain text with newlines converted to <br>
+		content.innerHTML = displayText
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+			.replace(/\n/g, '<br>');
+	}
 
 	// Render any persisted images (shown when replaying history)
 	if (inlineImages.length > 0) {
@@ -941,21 +945,20 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 	// Render LaTeX math in this message using KaTeX
 	if (sender === 'bot') {
 		const renderKatex = () => {
-			if (window.renderMathInElement) {
-				renderMathInElement(content, {
-					delimiters: [
-						{ left: '$$', right: '$$', display: true },
-						{ left: '$',  right: '$',  display: false },
-						{ left: '\\(', right: '\\)', display: false },
-						{ left: '\\[', right: '\\]', display: true }
-					],
-					throwOnError: false,
-					output: 'html'
-				});
-				chatMessages.scrollTop = chatMessages.scrollHeight;
-			}
+			renderMathInElement(content, {
+				delimiters: [
+					{ left: '$$', right: '$$', display: true },
+					{ left: '$',  right: '$',  display: false },
+					{ left: '\\(', right: '\\)', display: false },
+					{ left: '\\[', right: '\\]', display: true }
+				],
+				throwOnError: false,
+				output: 'html'
+			});
+			chatMessages.scrollTop = chatMessages.scrollHeight;
 		};
-		// KaTeX scripts are deferred — wait for them if not yet ready
+		// KaTeX is loaded synchronously before this script — it's always ready.
+		// The window.load fallback is kept as a safety net for any edge cases.
 		if (window.renderMathInElement) {
 			renderKatex();
 		} else {
@@ -1689,7 +1692,7 @@ async function processUserMessage(message) {
 
 			// Strip the S-DO offer text from the last assistant message so Gemini
 			// doesn't treat it as a pattern to repeat.
-			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			const SDO_PATTERN = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
 			for (let i = context.length - 1; i >= 0; i--) {
 				if (context[i].role === 'assistant') {
 					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
@@ -1718,7 +1721,7 @@ async function processUserMessage(message) {
 			// "S" or anything else → stay Socratic, reset so the offer can fire again.
 			// Also strip the S-DO offer text from the last assistant message so Gemini
 			// doesn't keep seeing it as a pattern to repeat.
-			const SDO_PATTERN = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			const SDO_PATTERN = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
 			for (let i = context.length - 1; i >= 0; i--) {
 				if (context[i].role === 'assistant') {
 					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
@@ -1756,8 +1759,10 @@ async function processUserMessage(message) {
 			role: 'system',
 			content: `REMINDER — DIDACTIC MODE (ONE SHOT).
 • Give the answer first, then the full step-by-step explanation using the EXACT numbers from the problem.
-• Do NOT end with a follow-up question or ask the student to think further.
+• Do NOT end with a follow-up question or any sentence ending with "?".
+• Do NOT write "Does this help?", "Do you understand?", "Is this clear?", "Would you like to know more?", or any similar closing question.
 • Do NOT append any "reply D / reply S" prompt.
+• Your final sentence MUST be a statement, not a question.
 • After this response the tutor returns to Socratic mode automatically.`
 		});
 	}
@@ -1848,9 +1853,13 @@ async function processUserMessage(message) {
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
 			// Strip any S-DO offer or Socratic follow-up Gemini appended.
-			const SDO_STRIP = /\*\*You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?\*\*/g;
+			const SDO_STRIP = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
+			// Also strip any follow-up questions Gemini adds despite the rules.
+			// Match common patterns: "Does this...", "Is this...", "Do you...", etc.
+			const FOLLOWUP_STRIP = /\n+(?:Does this|Do you|Is this|Would you like|Let me know if|Feel free to|Hope this)[^\n]*\?[^\n]*/gi;
 			botResponse = botResponse
 				.replace(SDO_STRIP, '')
+				.replace(FOLLOWUP_STRIP, '')
 				.replace(/\n+Now[,.]?\s*(let'?s?\s*)?(switch\s*(back\s*to|to)\s*Socratic|return\s*to\s*(the\s*)?Socratic)[^\n]*/gi, '')
 				.trim();
 			context[context.length - 1] = { role: 'assistant', content: botResponse };
