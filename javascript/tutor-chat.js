@@ -73,6 +73,14 @@ Ground your explanation in the provided COURSE MATERIALS context wherever possib
 Focus on core introductory physics topics.`;
 
 const SHARED_INSTRUCTIONS = `
+MATH FORMATTING RULES (MANDATORY):
+Always format ALL mathematical expressions using LaTeX delimiters so they render correctly:
+- Inline math (variables, short expressions): wrap with single dollar signs, e.g. $m_1 v_1 + m_2 v_2 = (m_1 + m_2)v_f$
+- Display math (equations on their own line): wrap with double dollar signs on the SAME line as the math, e.g. $$v_f = \\frac{4.8}{80.004}$$
+- IMPORTANT: Never put a newline between the $$ delimiter and the equation content. Write display math as $$equation$$ on one line.
+- Use LaTeX subscripts and superscripts (m_1, v^2) — do NOT use Unicode characters like m₁ or v².
+- Every equation, every variable with a subscript, every fraction must be inside $ or $$ delimiters.
+
 REFERENCE LINKS INSTRUCTIONS:
 You have access to the student's physics course materials including lecture slides, textbook chapters, and other uploaded resources. Relevant excerpts will be provided in context under "COURSE MATERIALS".
 When answering, ALWAYS ground your response in the provided course material excerpts. Quote or paraphrase directly from them when relevant. Prefer the course materials over general knowledge.
@@ -784,7 +792,9 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 		const mathBlocks = [];
 		let protected_text = displayText
 			.replace(/\$\$[\s\S]+?\$\$/g, (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
-			.replace(/\$[^$\n]+?\$/g,      (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; });
+			.replace(/\$[^$]+?\$/g,        (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
+			.replace(/\\\([\s\S]+?\\\)/g,  (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; })
+			.replace(/\\\[[\s\S]+?\\\]/g,  (m) => { mathBlocks.push(m); return `\x00MATH${mathBlocks.length - 1}\x00`; });
 		protected_text = window.convertLatexToUnicode(protected_text);
 		// Restore math blocks
 		displayText = protected_text.replace(/\x00MATH(\d+)\x00/g, (_, i) => mathBlocks[i]);
@@ -836,12 +846,41 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 		return '';
 	});
 
-	content.innerHTML = textWithoutImages
-	.replace(/\n/g, '<br>')
-	.replace(/<https?:\/\/[^>]+>/g, (match) => {
-		const url = match.slice(1, -1);
-		return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-	});
+	// Protect math blocks from the \n → <br> replacement.
+	// KaTeX needs the raw delimiter text intact — inserting <br> tags inside
+	// $$...$$ or $...$ blocks prevents renderMathInElement from finding them.
+	const htmlMathBlocks = [];
+	let htmlSafeText = textWithoutImages
+		// Must protect $$...$$ first (longer delimiter wins)
+		.replace(/\$\$[\s\S]+?\$\$/g, (m) => {
+			htmlMathBlocks.push(m);
+			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
+		})
+		.replace(/\$[^$]+?\$/g, (m) => {
+			htmlMathBlocks.push(m);
+			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
+		})
+		.replace(/\\\([\s\S]+?\\\)/g, (m) => {
+			htmlMathBlocks.push(m);
+			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
+		})
+		.replace(/\\\[[\s\S]+?\\\]/g, (m) => {
+			htmlMathBlocks.push(m);
+			return `\x00HTMLMATH${htmlMathBlocks.length - 1}\x00`;
+		});
+
+	// Apply line-break and URL replacements only on non-math text
+	htmlSafeText = htmlSafeText
+		.replace(/\n/g, '<br>')
+		.replace(/<https?:\/\/[^>]+>/g, (match) => {
+			const url = match.slice(1, -1);
+			return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+		});
+
+	// Restore math blocks (delimiters now intact for KaTeX)
+	htmlSafeText = htmlSafeText.replace(/\x00HTMLMATH(\d+)\x00/g, (_, i) => htmlMathBlocks[i]);
+
+	content.innerHTML = htmlSafeText;
 
 	// Render any persisted images (shown when replaying history)
 	if (inlineImages.length > 0) {
