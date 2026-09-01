@@ -1690,13 +1690,13 @@ async function processUserMessage(message) {
 				};
 			}
 
-			// Strip the S-DO offer text from the last assistant message so Gemini
+			// Strip the S-DO offer text from ALL assistant messages in context so Gemini
 			// doesn't treat it as a pattern to repeat.
-			const SDO_PATTERN = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
+			const SDO_PATTERN = /\*{0,2}You[\u2019']ve clearly put real effort[\s\S]*?step by step \(reply .{1,3}S.{1,3}\)\?[\*\u201d"]{0,2}/g;
 			for (let i = context.length - 1; i >= 0; i--) {
 				if (context[i].role === 'assistant') {
 					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
-					break;
+					break; // only strip the last one — the one that has the actual SDO offer
 				}
 			}
 
@@ -1721,7 +1721,7 @@ async function processUserMessage(message) {
 			// "S" or anything else → stay Socratic, reset so the offer can fire again.
 			// Also strip the S-DO offer text from the last assistant message so Gemini
 			// doesn't keep seeing it as a pattern to repeat.
-			const SDO_PATTERN = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
+			const SDO_PATTERN = /\*{0,2}You[\u2019']ve clearly put real effort[\s\S]*?step by step \(reply .{1,3}S.{1,3}\)\?[\*\u201d"]{0,2}/g;
 			for (let i = context.length - 1; i >= 0; i--) {
 				if (context[i].role === 'assistant') {
 					context[i] = { ...context[i], content: context[i].content.replace(SDO_PATTERN, '').trim() };
@@ -1853,7 +1853,7 @@ async function processUserMessage(message) {
 			context[0] = { role: 'system', content: getSystemPrompt() };
 
 			// Strip any S-DO offer or Socratic follow-up Gemini appended.
-			const SDO_STRIP = /\*{0,2}You've clearly put real effort[\s\S]*?step by step \(reply "S"\)\?[\*"]{0,2}/g;
+			const SDO_STRIP = /\*{0,2}You[\u2019']ve clearly put real effort[\s\S]*?step by step \(reply .{1,3}S.{1,3}\)\?[\*\u201d"]{0,2}/g;
 			// Also strip any follow-up questions Gemini adds despite the rules.
 			// Match common patterns: "Does this...", "Is this...", "Do you...", etc.
 			const FOLLOWUP_STRIP = /\n+(?:Does this|Do you|Is this|Would you like|Let me know if|Feel free to|Hope this)[^\n]*\?[^\n]*/gi;
