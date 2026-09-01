@@ -1126,11 +1126,6 @@ class SessionManager {
 
     const time = new Date(timestamp).toLocaleTimeString();
 
-    let displayText = message;
-    if (window.convertLatexToUnicode) {
-      displayText = window.convertLatexToUnicode(message);
-    }
-
     let filesHtml = '';
     if (files && files.length > 0) {
       filesHtml = '<div class="message-files" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;">';
@@ -1141,17 +1136,40 @@ class SessionManager {
       filesHtml += '</div>';
     }
 
-    content.innerHTML = `
-      <div class="message-header">
-        <span class="message-author">${userName}</span>
-        <span class="message-time">${time}</span>
-      </div>
-      <div class="message-text">${displayText.replace(/\n/g, "<br>").replace(/<https?:\/\/[^>]+>/g, (match) => {
-        const url = match.slice(1, -1);
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-      })}</div>
-      ${filesHtml}
-    `;
+    // Render message text — bot messages use the full marked+KaTeX pipeline,
+    // user messages use plain text with HTML escaping.
+    const headerHtml = `<div class="message-header"><span class="message-author">${userName}</span><span class="message-time">${time}</span></div>`;
+
+    if (sender === 'bot') {
+      // Protect math blocks before marked.parse() so delimiters aren't mangled
+      const mathBlocks = [];
+      const protect = (str) => str
+        .replace(/\$\$[\s\S]+?\$\$/g, (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+        .replace(/\$[^$\n]+?\$/g,     (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+        .replace(/\\\([\s\S]+?\\\)/g, (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; })
+        .replace(/\\\[[\s\S]+?\\\]/g, (m) => { mathBlocks.push(m); return `ÿMATHÿ${mathBlocks.length - 1}ÿ`; });
+      const restore = (str) => str.replace(/ÿMATHÿ(\d+)ÿ/g, (_, i) => mathBlocks[i]);
+
+      let bodyHtml;
+      if (window.marked) {
+        window.marked.setOptions({ gfm: true, breaks: false, pedantic: false });
+        bodyHtml = restore(window.marked.parse(protect(message)));
+      } else {
+        bodyHtml = message.replace(/\n/g, '<br>');
+      }
+      // Angle-bracket URLs
+      bodyHtml = bodyHtml.replace(/<(https?:\/\/[^>]+)>/g, (_, url) =>
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
+
+      content.innerHTML = headerHtml + bodyHtml + filesHtml;
+    } else {
+      // User messages: escape HTML, convert newlines
+      const safeText = message
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+      content.innerHTML = headerHtml + `<div class="message-text">${safeText}</div>` + filesHtml;
+    }
 
     // Attach citation pills for bot messages.
     // Other participants get citations from the WebSocket payload.
@@ -1177,6 +1195,22 @@ class SessionManager {
     messageDiv.appendChild(content);
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Run KaTeX on bot messages after they're in the DOM
+    if (sender === 'bot' && window.renderMathInElement) {
+      try {
+        window.renderMathInElement(content, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$',  right: '$',  display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false,
+          output: 'html'
+        });
+      } catch(e) { /* ignore KaTeX errors */ }
+    }
   }
 
   getFileIcon(fileType) {
