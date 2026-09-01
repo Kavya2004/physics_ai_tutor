@@ -1,5 +1,8 @@
 let isProcessing = false;
 
+// ── Startup diagnostics ───────────────────────────────────────────────────
+console.log('[tutor-chat] script loaded. window.marked:', typeof window.marked, '| window.katex:', typeof window.katex, '| window.renderMathInElement:', typeof window.renderMathInElement);
+
 // ── Pedagogical mode tracking ─────────────────────────────────────────────
 // Counts completed exchange rounds (1 user msg + 1 bot msg = 1 round).
 // After round 5 the student is offered a choice (S-DO prompt).
@@ -859,19 +862,20 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 		if (window.marked) {
 			window.marked.setOptions({
 				gfm: true,
-				breaks: false,   // don't auto-br on every newline — marked handles paragraphs
+				breaks: false,
 				pedantic: false,
 			});
-			// marked wraps top-level content in <p> tags which is fine for chat.
-			// Use marked.parse() for block-level (paragraphs, headers, lists, tables).
 			markedHtml = window.marked.parse(protected_md);
+			console.debug('[render] marked OK, html snippet:', markedHtml.slice(0, 200));
 		} else {
+			console.warn('[render] window.marked is UNDEFINED — falling back to plain text');
 			// Fallback if marked somehow isn't loaded: plain newline→<br>
 			markedHtml = protected_md.replace(/\n/g, '<br>');
 		}
 
 		// Step 4 — restore math blocks into the rendered HTML
 		markedHtml = restore(markedHtml);
+		console.debug('[render] math blocks restored:', mathBlocks.length, 'blocks. katex available:', !!window.renderMathInElement);
 
 		// Angle-bracket URLs: <https://...> → clickable link
 		markedHtml = markedHtml.replace(/<(https?:\/\/[^>]+)>/g, (_, url) =>
@@ -945,23 +949,27 @@ function _addMessageInternal(text, sender, files = [], citation = null, silent =
 	// Render LaTeX math in this message using KaTeX
 	if (sender === 'bot') {
 		const renderKatex = () => {
-			renderMathInElement(content, {
-				delimiters: [
-					{ left: '$$', right: '$$', display: true },
-					{ left: '$',  right: '$',  display: false },
-					{ left: '\\(', right: '\\)', display: false },
-					{ left: '\\[', right: '\\]', display: true }
-				],
-				throwOnError: false,
-				output: 'html'
-			});
+			console.debug('[katex] renderMathInElement firing on', content.textContent.slice(0, 80));
+			try {
+				renderMathInElement(content, {
+					delimiters: [
+						{ left: '$$', right: '$$', display: true },
+						{ left: '$',  right: '$',  display: false },
+						{ left: '\\(', right: '\\)', display: false },
+						{ left: '\\[', right: '\\]', display: true }
+					],
+					throwOnError: false,
+					output: 'html'
+				});
+			} catch(e) {
+				console.error('[katex] renderMathInElement threw:', e);
+			}
 			chatMessages.scrollTop = chatMessages.scrollHeight;
 		};
-		// KaTeX is loaded synchronously before this script — it's always ready.
-		// The window.load fallback is kept as a safety net for any edge cases.
 		if (window.renderMathInElement) {
 			renderKatex();
 		} else {
+			console.warn('[katex] renderMathInElement not ready, waiting for load event');
 			window.addEventListener('load', renderKatex, { once: true });
 		}
 	}
