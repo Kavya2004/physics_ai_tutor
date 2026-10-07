@@ -8,11 +8,6 @@ window.sessionTracker = (() => {
   const featuresUsed = new Set();   // unique feature buckets active this session
   const sequence     = [];          // [{feature, t}]  t = seconds from session start
 
-  /**
-   * Record a feature interaction.
-   * Called automatically by track() in tutor-chat.js via the featureMap.
-   * @param {string} feature  e.g. 'chat', 'whiteboard', 'voice'
-   */
   function use(feature) {
     featuresUsed.add(feature);
     sequence.push({
@@ -21,35 +16,9 @@ window.sessionTracker = (() => {
     });
   }
 
-  /**
-   * Derive common sequential pairs from the sequence array.
-   * e.g. [chat, whiteboard, chat, quiz] → 'chat→whiteboard, whiteboard→chat, chat→quiz'
-   */
-  function buildSequencePairs() {
-    const pairs = [];
-    for (let i = 0; i < sequence.length - 1; i++) {
-      const a = sequence[i].feature;
-      const b = sequence[i + 1].feature;
-      if (a !== b) pairs.push(`${a}→${b}`);
-    }
-    // deduplicate
-    return [...new Set(pairs)].join(',');
-  }
-
-  /**
-   * Flush session summary to Vercel Analytics on page unload.
-   */
   function flush() {
-    const duration = Math.round((Date.now() - startTime) / 1000);
     const features = [...featuresUsed];
 
-    // Co-usage pairs (unordered, e.g. 'chat+whiteboard')
-    const coPairs = [];
-    for (let i = 0; i < features.length; i++)
-      for (let j = i + 1; j < features.length; j++)
-        coPairs.push(`${features[i]}+${features[j]}`);
-
-    // Multimodal mode label
     const has = f => features.includes(f);
     const modality =
       features.length >= 3          ? 'fully_multimodal'  :
@@ -65,6 +34,7 @@ window.sessionTracker = (() => {
         name: 'session_ended',
         modality,
         feature_count: features.length,
+        context: window._inClassMode ? 'in_class' : 'at_home',
       });
     }
   }
@@ -73,3 +43,33 @@ window.sessionTracker = (() => {
 
   return { use };
 })();
+
+// ── Global track() helper — available to all scripts ─────────────────────────
+// Defined here (in session-tracker.js) so tutor-whiteboard.js, student-notes.js,
+// and physics-stickers.js can call track() even though they load after this file.
+window.track = function track(event, data = {}) {
+  const featureMap = {
+    message_sent:             'chat',
+    file_uploaded:            'file',
+    save_chat_clicked:        'chat',
+    summary_generated:        'summary',
+    quiz_opened:              'quiz',
+    voice_input_used:         'voice',
+    whiteboard_tab_opened:    'whiteboard',
+    whiteboard_draw_toggled:  'whiteboard',
+    whiteboard_saved:         'whiteboard',
+    whiteboard_sent_to_tutor: 'whiteboard',
+    notes_draw_mode_used:     'notes',
+    notes_cleared:            'notes',
+    notes_saved:              'notes',
+  };
+
+  const feature = featureMap[event];
+  if (feature && window.sessionTracker) window.sessionTracker.use(feature);
+
+  if (window.va) window.va('event', {
+    name: event,
+    ...data,
+    context: window._inClassMode ? 'in_class' : 'at_home',
+  });
+};

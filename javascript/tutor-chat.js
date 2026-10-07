@@ -1,32 +1,6 @@
 let isProcessing = false;
 
-// ── Vercel Analytics helper ───────────────────────────────────────────────
-function track(event, data = {}) {
-  const featureMap = {
-    message_sent:             'chat',
-    file_uploaded:            'file',
-    save_chat_clicked:        'chat',
-    summary_generated:        'summary',
-    quiz_opened:              'quiz',
-    voice_input_used:         'voice',
-    whiteboard_tab_opened:    'whiteboard',
-    whiteboard_draw_toggled:  'whiteboard',
-    whiteboard_saved:         'whiteboard',
-    whiteboard_sent_to_tutor: 'whiteboard',
-    notes_draw_mode_used:     'notes',
-    notes_cleared:            'notes',
-    notes_saved:              'notes',
-  };
-
-  const feature = featureMap[event];
-  if (feature && window.sessionTracker) window.sessionTracker.use(feature);
-
-  if (window.va) window.va('event', {
-    name: event,
-    ...data,
-    context: window._inClassMode ? 'in_class' : 'at_home',
-  });
-}
+// track() is defined in session-tracker.js (loads first) as window.track
 
 // ── Startup diagnostics ───────────────────────────────────────────────────
 console.log('[tutor-chat] script loaded. window.marked:', typeof window.marked, '| window.katex:', typeof window.katex, '| window.renderMathInElement:', typeof window.renderMathInElement);
