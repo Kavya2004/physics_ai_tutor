@@ -1,5 +1,10 @@
 let isProcessing = false;
 
+// ── Vercel Analytics helper ───────────────────────────────────────────────
+function track(event, data = {}) {
+	if (window.va) window.va('event', { name: event, ...data });
+}
+
 // ── Startup diagnostics ───────────────────────────────────────────────────
 console.log('[tutor-chat] script loaded. window.marked:', typeof window.marked, '| window.katex:', typeof window.katex, '| window.renderMathInElement:', typeof window.renderMathInElement);
 
@@ -342,6 +347,7 @@ async function getGeminiResponse(messages, files = []) {
 }
 
 function handleFileSelect(event) {
+	track('file_uploaded');
 	const files = Array.from(event.target.files);
 	const filePreview = document.getElementById('filePreview');
 
@@ -676,7 +682,10 @@ function createChatControls() {
 		font-size: 12px;
 		transition: all 0.3s ease;
 	`;
-	saveBtn.addEventListener('click', saveChatHistory);
+	saveBtn.addEventListener('click', () => {
+		track('save_chat_clicked');
+		saveChatHistory();
+	});
 
 	const summaryBtn = document.createElement('button');
 	summaryBtn.innerHTML = '📝 Generate Summary';
@@ -690,7 +699,10 @@ function createChatControls() {
 		font-size: 12px;
 		transition: all 0.3s ease;
 	`;
-	summaryBtn.addEventListener('click', generateChatSummary);
+	summaryBtn.addEventListener('click', () => {
+		track('summary_generated');
+		generateChatSummary();
+	});
 
 	const quizBtn = document.createElement('button');
 	quizBtn.innerHTML = 'Quiz';
@@ -706,6 +718,7 @@ function createChatControls() {
 		transition: all 0.3s ease;
 	`;
 	quizBtn.addEventListener('click', () => {
+		track('quiz_opened');
 		if (window.quizIntegration) window.quizIntegration.showQuizMenu();
 	});
 
@@ -746,6 +759,7 @@ function initializeVoiceInput() {
 		if (listening) {
 			recognition.stop();
 		} else {
+			track('voice_input_used');
 			recognition.start();
 			listening = true;
 			micBtn.style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
@@ -766,6 +780,7 @@ function handleSendMessage() {
 	const message = input.value.trim();
 
 	if ((message || uploadedFiles.length > 0) && !isProcessing) {
+		track('message_sent');
 		processUserMessage(message);
 		input.value = '';
 	}
