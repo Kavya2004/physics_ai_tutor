@@ -102,7 +102,7 @@ function setupWhiteboardControls() {
 		drawStudentButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			window.va && window.va('event', { name: 'whiteboard_draw_toggled' });
+			window.va && window.va('event', { name: 'whiteboard_draw_toggled', context: window._inClassMode ? 'in_class' : 'at_home' });
 			toggleDrawing('student');
 		});
 	} else {
@@ -292,9 +292,9 @@ function setupCanvas(canvas, ctx, boardType) {
 
 function switchWhiteboard(boardType) {
 	if (boardType === 'notes') {
-		window.va && window.va('event', { name: 'notes_tab_opened' });
+		window.va && window.va('event', { name: 'notes_tab_opened', context: window._inClassMode ? 'in_class' : 'at_home' });
 	} else {
-		window.va && window.va('event', { name: 'whiteboard_tab_opened' });
+		window.va && window.va('event', { name: 'whiteboard_tab_opened', context: window._inClassMode ? 'in_class' : 'at_home' });
 	}
 	// Save current board state before switching
 	if (activeWhiteboard === 'teacher' || activeWhiteboard === 'student') {
@@ -1537,7 +1537,7 @@ window.generateAndPlaceImage = generateAndPlaceImage;
 
 // Save the whiteboard as a PNG download
 function saveWhiteboardAsImage(boardType = 'student') {
-	window.va && window.va('event', { name: 'whiteboard_saved' });
+	window.va && window.va('event', { name: 'whiteboard_saved', context: window._inClassMode ? 'in_class' : 'at_home' });
 	const srcCanvas = document.getElementById(
 		boardType === 'teacher' ? 'teacherWhiteboard' : 'studentWhiteboard'
 	);
