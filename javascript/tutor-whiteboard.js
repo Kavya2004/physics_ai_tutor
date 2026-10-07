@@ -102,7 +102,7 @@ function setupWhiteboardControls() {
 		drawStudentButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-		window.track && window.track('whiteboard_draw_toggled');
+		window.va && window.va('event', { name: 'whiteboard_draw_toggled' });
 			toggleDrawing('student');
 		});
 	} else {
@@ -292,9 +292,9 @@ function setupCanvas(canvas, ctx, boardType) {
 
 function switchWhiteboard(boardType) {
 	if (boardType === 'notes') {
-		window.track && window.track('notes_tab_opened');
+		window.va && window.va('event', { name: 'notes_tab_opened' });
 	} else {
-		window.track && window.track('whiteboard_tab_opened');
+		window.va && window.va('event', { name: 'whiteboard_tab_opened' });
 	}
 	// Save current board state before switching
 	if (activeWhiteboard === 'teacher' || activeWhiteboard === 'student') {
@@ -1537,7 +1537,7 @@ window.generateAndPlaceImage = generateAndPlaceImage;
 
 // Save the whiteboard as a PNG download
 function saveWhiteboardAsImage(boardType = 'student') {
-	window.track && window.track('whiteboard_saved');
+	window.va && window.va('event', { name: 'whiteboard_saved' });
 	const srcCanvas = document.getElementById(
 		boardType === 'teacher' ? 'teacherWhiteboard' : 'studentWhiteboard'
 	);
