@@ -16,8 +16,29 @@ window.sessionTracker = (() => {
     });
   }
 
+  /**
+   * Derive common sequential pairs from the sequence array.
+   * e.g. [chat, whiteboard, chat, quiz] → 'chat→whiteboard,whiteboard→chat,chat→quiz'
+   */
+  function buildSequencePairs() {
+    const pairs = [];
+    for (let i = 0; i < sequence.length - 1; i++) {
+      const a = sequence[i].feature;
+      const b = sequence[i + 1].feature;
+      if (a !== b) pairs.push(`${a}→${b}`);
+    }
+    return [...new Set(pairs)].join(',');
+  }
+
   function flush() {
+    const duration = Math.round((Date.now() - startTime) / 1000);
     const features = [...featuresUsed];
+
+    // Co-usage pairs (unordered, e.g. 'chat+whiteboard')
+    const coPairs = [];
+    for (let i = 0; i < features.length; i++)
+      for (let j = i + 1; j < features.length; j++)
+        coPairs.push(`${features[i]}+${features[j]}`);
 
     const has = f => features.includes(f);
     const modality =
